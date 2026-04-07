@@ -39,6 +39,15 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install dependencies
         run: npm ci
 
@@ -78,3 +87,15 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT_KEY_FILE: .secrets/kiotviet-service-account.json
 
         run: npm run sync -- orders
+
+      - name: Upload debug artifacts (.storage)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-artifacts-${{ github.ref_name }}-${{ github.run_id }}
+          path: |
+            .storage/**/*.png
+            .storage/**/*.html
+            .storage/**/*.json
+          if-no-files-found: ignore
+          retention-days: 7

@@ -352,7 +352,35 @@ export async function runOrdersWatch() {
 
         // Trigger export.
         log('export:open-menu');
-        const downloadPromise = page.waitForEvent('download', { timeout: exportTimeoutMs });
+        const downloadEventPromise = page
+          .waitForEvent('download', { timeout: exportTimeoutMs })
+          .then((d) => ({ kind: 'download' as const, d }))
+          .catch((e) => ({ kind: 'download-timeout' as const, error: String(e) }));
+
+        const xlsxResponsePromise = page
+          .waitForResponse(
+            (resp) => {
+              try {
+                const h = resp.headers();
+                const ct = (h['content-type'] ?? '').toLowerCase();
+                const cd = (h['content-disposition'] ?? '').toLowerCase();
+                const url = resp.url().toLowerCase();
+                const looksLikeXlsx =
+                  url.includes('.xlsx') ||
+                  cd.includes('.xlsx') ||
+                  ct.includes('spreadsheetml') ||
+                  ct.includes('application/vnd.ms-excel');
+                const looksLikeAttachment = cd.includes('attachment') || url.includes('download');
+                return looksLikeXlsx && (looksLikeAttachment || ct.includes('octet-stream') || ct.includes('spreadsheetml'));
+              } catch {
+                return false;
+              }
+            },
+            { timeout: exportTimeoutMs }
+          )
+          .then((resp) => ({ kind: 'xlsx-response' as const, resp }))
+          .catch((e) => ({ kind: 'xlsx-timeout' as const, error: String(e) }));
+
         await withRetries(() => exportSelectedOrdersDetail(page), {
           retries: 3,
           delayMs: 750,
@@ -364,22 +392,47 @@ export async function runOrdersWatch() {
         const start = Date.now();
         let exported = false;
 
+        let toastClicks = 0;
+        let toastSeen = 0;
+
         while (!exported && Date.now() - start < exportTimeoutMs) {
-          await clickToastDownloadLinkIfPresent(page).catch(() => false);
+          const clickedToast = await clickToastDownloadLinkIfPresent(page).catch(() => false);
+          if (clickedToast) toastClicks++;
+
+          const toastLink = page.locator('text=tải xuống').first();
+          if ((await toastLink.count().catch(() => 0)) > 0) toastSeen++;
 
           const maybeDownload = await Promise.race([
-            downloadPromise.then((d) => ({ kind: 'download' as const, d })),
+            downloadEventPromise,
+            xlsxResponsePromise,
             page.waitForTimeout(500).then(() => ({ kind: 'tick' as const }))
           ]);
 
-          if (maybeDownload.kind !== 'download') continue;
-          const download = maybeDownload.d;
+          if (maybeDownload.kind === 'tick') continue;
 
-          const suggested = download.suggestedFilename();
           const ts = format(new Date(), 'yyyyMMdd_HHmmss');
-          const outName = `${ts}_orders_detail_${suggested}`;
-          const outPath = path.join(downloadsDir, outName);
-          await download.saveAs(outPath);
+          let outPath: string;
+
+          if (maybeDownload.kind === 'download') {
+            const download = maybeDownload.d;
+            const suggested = download.suggestedFilename();
+            const outName = `${ts}_orders_detail_${suggested}`;
+            outPath = path.join(downloadsDir, outName);
+            await download.saveAs(outPath);
+          } else if (maybeDownload.kind === 'xlsx-response') {
+            const resp = maybeDownload.resp;
+            const urlFile = resp.url().split('?')[0]?.split('/').pop() || 'orders.xlsx';
+            const safeName = urlFile.toLowerCase().endsWith('.xlsx') ? urlFile : `${urlFile}.xlsx`;
+            const outName = `${ts}_orders_detail_${safeName}`;
+            outPath = path.join(downloadsDir, outName);
+            const buf = await resp.body();
+            await fs.writeFile(outPath, buf);
+          } else {
+            // one of the timeout sentinels
+            throw new Error(
+              `Export download did not start. download=${'error' in maybeDownload ? maybeDownload.error : 'unknown'} toastClicks=${toastClicks} toastSeen=${toastSeen}`
+            );
+          }
 
           log('export:downloaded', { outPath });
 

@@ -399,18 +399,21 @@ export async function exportSelectedOrdersDetail(page: Page) {
 
   // Some pages show a column selection popup that requires a confirm click.
   // Wait briefly for it, then click the confirm button if present.
-  const confirm = page
-    .locator('.k-window:visible button.kv-btn-confirm')
-    .filter({ hasText: 'Xuất file' })
-    .first();
-
-  const confirmVisible = await confirm
+  const popup = page.locator('.k-window:visible').last();
+  const popupVisible = await popup
     .waitFor({ state: 'visible', timeout: 5_000 })
     .then(() => true)
     .catch(() => false);
 
-  if (confirmVisible) {
-    await confirm.click({ timeout: 10_000 });
+  if (popupVisible) {
+    const confirm = popup
+      .locator('button')
+      .filter({ hasText: 'Xuất file' })
+      .first();
+
+    if ((await confirm.count().catch(() => 0)) > 0) {
+      await confirm.click({ timeout: 10_000 }).catch(() => undefined);
+    }
   }
 }
 
