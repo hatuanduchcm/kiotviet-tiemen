@@ -62,6 +62,11 @@ export async function runOrdersWatch() {
     const maxPolls = cfg.orders?.maxPolls ?? 0; // 0 = unlimited
     let pollCount = 0;
 
+    const shouldStopByPollCount = () => maxPolls > 0 && pollCount >= maxPolls;
+    const stopByPollCount = (reason: string) => {
+      log('poll:stop', { pollCount, maxPolls, reason });
+    };
+
     const startedAtMs = Date.now();
     const maxRunMs = cfg.orders?.maxRunMs ?? 0; // 0 = unlimited
     const maxConsecutiveErrors = cfg.orders?.maxConsecutiveErrors ?? 0; // 0 = unlimited
@@ -257,6 +262,11 @@ export async function runOrdersWatch() {
                 cache.lastScanAtIso = isoVietnam(new Date(firstPageMaxTime));
                 cache.lastSnapshot = { orderCodesInList, capturedAtIso: isoVietnam(new Date()) };
                 await saveOrdersCache(cachePath, cache);
+
+                if (shouldStopByPollCount()) {
+                  stopByPollCount('no-new-after-cache-time');
+                  return;
+                }
                 await sleep(pollIntervalMs);
                 continue;
               }
@@ -266,6 +276,11 @@ export async function runOrdersWatch() {
               cache.lastScanAtIso = isoVietnam(new Date(firstPageMaxTime));
               cache.lastSnapshot = { orderCodesInList, capturedAtIso: isoVietnam(new Date()) };
               await saveOrdersCache(cachePath, cache);
+
+              if (shouldStopByPollCount()) {
+                stopByPollCount('no-new-after-cache-time');
+                return;
+              }
               await sleep(pollIntervalMs);
               continue;
             }
@@ -360,6 +375,10 @@ export async function runOrdersWatch() {
           await gotoFirstOrdersPagerPage(page);
           await ensureSortByTimeDesc(page);
 
+          if (shouldStopByPollCount()) {
+            stopByPollCount('no-missing-orders-after-cutoff');
+            return;
+          }
           await sleep(pollIntervalMs);
           continue;
         }
@@ -636,6 +655,10 @@ export async function runOrdersWatch() {
         }).catch(() => false);
 
         if (relogged) {
+          if (shouldStopByPollCount()) {
+            stopByPollCount('relogged');
+            return;
+          }
           await sleep(Math.min(2_000, pollIntervalMs));
           continue;
         }
