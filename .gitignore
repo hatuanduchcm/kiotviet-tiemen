@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+dist/
+playwright-report/
+test-results/
+.storage/
+.state/
+downloads/
+.secrets/
+*.trace.zip
+*.log
+.DS_Store
