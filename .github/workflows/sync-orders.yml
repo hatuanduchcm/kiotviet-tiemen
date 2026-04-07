@@ -27,7 +27,7 @@ jobs:
     # Safety: don't run scheduled jobs on non-main branches.
     if: ${{ github.event_name != 'schedule' || github.ref_name == 'main' }}
 
-    timeout-minutes: 30
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.ref_name == 'main') && 30 || 5 }}
 
     steps:
       - name: Checkout
@@ -77,8 +77,11 @@ jobs:
           ORDERS_URL: ${{ vars.ORDERS_URL }}
           ORDERS_TIME_PRESET: ${{ vars.ORDERS_TIME_PRESET || 'Hôm nay' }}
           ORDERS_POLL_INTERVAL_MS: ${{ vars.ORDERS_POLL_INTERVAL_MS || '10000' }}
-          ORDERS_EXPORT_TIMEOUT_MS: ${{ vars.ORDERS_EXPORT_TIMEOUT_MS || '120000' }}
+          ORDERS_EXPORT_TIMEOUT_MS: ${{ vars.ORDERS_EXPORT_TIMEOUT_MS || '30000' }}
           ORDERS_MAX_POLLS: ${{ vars.ORDERS_MAX_POLLS || '1' }}
+          # Develop safeguard: stop the watcher after ~5 minutes.
+          # Prod/schedule can override via vars or keep unlimited (0).
+          ORDERS_MAX_RUN_MS: ${{ vars.ORDERS_MAX_RUN_MS || ((github.event_name == 'schedule' || github.ref_name == 'main') && '0' || '300000') }}
           ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD: ${{ vars.ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD || 'true' }}
 
           # Google Sheets

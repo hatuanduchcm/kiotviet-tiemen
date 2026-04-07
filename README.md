@@ -4,7 +4,7 @@ Automation pipeline:
 1) Open KiotViet web, login
 2) Navigate to Orders page, apply filters
 3) Detect new orders, export "File chi tiết" (xlsx)
-4) Parse xlsx and print JSON (upload to Google Sheets can be added later)
+4) Parse xlsx, upload to Google Sheets, and print JSON
 
 ## Setup
 
@@ -99,13 +99,23 @@ You can configure these as Environment Variables (Settings → Environments → 
 - `ORDERS_URL`
 - `ORDERS_TIME_PRESET` (default: `Hôm nay`)
 - `ORDERS_POLL_INTERVAL_MS` (default: `10000`)
-- `ORDERS_EXPORT_TIMEOUT_MS` (default: `120000`)
+- `ORDERS_EXPORT_TIMEOUT_MS` (default: `30000`)
 - `ORDERS_MAX_POLLS` (default: `1`)
+- `ORDERS_MAX_RUN_MS` (default: `0` = unlimited)
+- `ORDERS_MAX_CONSECUTIVE_ERRORS` (default: `0` = unlimited)
 - `ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD` (default: `true`)
 
 Note: the script is a watcher by default; in GitHub Actions we set `ORDERS_MAX_POLLS=1` so the job finishes.
 
+Additional safeguards:
+- In **develop** runs, the workflow limits job runtime to ~5 minutes and sets `ORDERS_MAX_RUN_MS=300000` by default.
+- In **prod** runs, the default job timeout is 30 minutes and `ORDERS_MAX_RUN_MS` defaults to unlimited (`0`).
+
 If you want a "run forever" process, run it on your own server/VM instead of Actions.
+
+### Caching (GitHub Actions)
+- Node dependencies are cached via `actions/setup-node` (`cache: npm`).
+- Playwright browser binaries are cached via `actions/cache` (`~/.cache/ms-playwright`) to reduce repeated downloads.
 
 ## Browser note
 - This project uses Playwright's bundled **Chromium** only (no Firefox/WebKit usage in code).

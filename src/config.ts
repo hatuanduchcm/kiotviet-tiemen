@@ -24,6 +24,8 @@ const EnvSchema = z.object({
   ORDERS_POLL_INTERVAL_MS: z.string().optional(),
   ORDERS_EXPORT_TIMEOUT_MS: z.string().optional(),
   ORDERS_MAX_POLLS: z.string().optional(),
+  ORDERS_MAX_RUN_MS: z.string().optional(),
+  ORDERS_MAX_CONSECUTIVE_ERRORS: z.string().optional(),
   HEADLESS: z.string().optional(),
   SLOW_MO_MS: z.string().optional(),
   TIMEOUT_MS: z.string().optional(),
@@ -49,6 +51,8 @@ export type AppConfig = {
     pollIntervalMs?: number;
     exportTimeoutMs?: number;
     maxPolls?: number;
+    maxRunMs?: number;
+    maxConsecutiveErrors?: number;
     deleteDownloadedAfterUpload?: boolean;
   };
   browser: {
@@ -81,8 +85,10 @@ export function loadConfig(): AppConfig {
       ordersUrl: ordersUrl ? ordersUrl : undefined,
       timePresetLabel: parsed.ORDERS_TIME_PRESET?.trim() || undefined,
       pollIntervalMs: numberFromString(parsed.ORDERS_POLL_INTERVAL_MS, 60_000),
-      exportTimeoutMs: numberFromString(parsed.ORDERS_EXPORT_TIMEOUT_MS, 120_000),
+      exportTimeoutMs: numberFromString(parsed.ORDERS_EXPORT_TIMEOUT_MS, 30_000),
       maxPolls: numberFromString(parsed.ORDERS_MAX_POLLS, 0),
+      maxRunMs: numberFromString(parsed.ORDERS_MAX_RUN_MS, 0),
+      maxConsecutiveErrors: numberFromString(parsed.ORDERS_MAX_CONSECUTIVE_ERRORS, 0),
       deleteDownloadedAfterUpload: boolFromString(parsed.ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD, true)
     },
     browser: {

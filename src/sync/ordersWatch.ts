@@ -62,6 +62,14 @@ export async function runOrdersWatch() {
     const maxPolls = cfg.orders?.maxPolls ?? 0; // 0 = unlimited
     let pollCount = 0;
 
+    const startedAtMs = Date.now();
+    const maxRunMs = cfg.orders?.maxRunMs ?? 0; // 0 = unlimited
+    const maxConsecutiveErrors = cfg.orders?.maxConsecutiveErrors ?? 0; // 0 = unlimited
+    let consecutiveErrors = 0;
+    let totalErrors = 0;
+
+    const isPastMaxRunTime = () => maxRunMs > 0 && Date.now() - startedAtMs >= maxRunMs;
+
     const exportTimeoutMs = cfg.orders?.exportTimeoutMs ?? 120_000;
     const deleteDownloadedAfterUpload = cfg.orders?.deleteDownloadedAfterUpload ?? true;
 
@@ -100,6 +108,17 @@ export async function runOrdersWatch() {
     while (true) {
       pollCount++;
       try {
+        if (isPastMaxRunTime()) {
+          log('poll:stop:max-run-time', {
+            pollCount,
+            maxPolls,
+            maxRunMs,
+            ranMs: Date.now() - startedAtMs,
+            totalErrors
+          });
+          return;
+        }
+
         // Session can expire; if we got redirected to login, re-authenticate first.
         await withRetries(
           () =>
@@ -350,105 +369,126 @@ export async function runOrdersWatch() {
         // Small pause so the UI updates selected state.
         await page.waitForTimeout(300);
 
-        // Trigger export.
-        log('export:open-menu');
-        const downloadEventPromise = page
-          .waitForEvent('download', { timeout: exportTimeoutMs })
-          .then((d) => ({ kind: 'download' as const, d }))
-          .catch((e) => ({ kind: 'download-timeout' as const, error: String(e) }));
+        // Trigger export + capture the xlsx. Retry once; if it still fails, abort the run.
+        let outPath: string | null = null;
+        for (let exportAttempt = 1; exportAttempt <= 2; exportAttempt++) {
+          log('export:open-menu', { exportAttempt, exportTimeoutMs });
 
-        const xlsxResponsePromise = page
-          .waitForResponse(
-            (resp) => {
-              try {
-                const h = resp.headers();
-                const ct = (h['content-type'] ?? '').toLowerCase();
-                const cd = (h['content-disposition'] ?? '').toLowerCase();
-                const url = resp.url().toLowerCase();
-                const looksLikeXlsx =
-                  url.includes('.xlsx') ||
-                  cd.includes('.xlsx') ||
-                  ct.includes('spreadsheetml') ||
-                  ct.includes('application/vnd.ms-excel');
-                const looksLikeAttachment = cd.includes('attachment') || url.includes('download');
-                return looksLikeXlsx && (looksLikeAttachment || ct.includes('octet-stream') || ct.includes('spreadsheetml'));
-              } catch {
-                return false;
-              }
-            },
-            { timeout: exportTimeoutMs }
-          )
-          .then((resp) => ({ kind: 'xlsx-response' as const, resp }))
-          .catch((e) => ({ kind: 'xlsx-timeout' as const, error: String(e) }));
+          const downloadEventPromise = page
+            .waitForEvent('download', { timeout: exportTimeoutMs })
+            .then((d) => ({ kind: 'download' as const, d }))
+            .catch((e) => ({ kind: 'download-timeout' as const, error: String(e) }));
 
-        await withRetries(() => exportSelectedOrdersDetail(page), {
-          retries: 3,
-          delayMs: 750,
-          label: 'exportSelectedOrdersDetail'
-        });
+          const xlsxResponsePromise = page
+            .waitForResponse(
+              (resp) => {
+                try {
+                  const h = resp.headers();
+                  const ct = (h['content-type'] ?? '').toLowerCase();
+                  const cd = (h['content-disposition'] ?? '').toLowerCase();
+                  const url = resp.url().toLowerCase();
+                  const looksLikeXlsx =
+                    url.includes('.xlsx') ||
+                    cd.includes('.xlsx') ||
+                    ct.includes('spreadsheetml') ||
+                    ct.includes('application/vnd.ms-excel');
+                  const looksLikeAttachment = cd.includes('attachment') || url.includes('download');
+                  return looksLikeXlsx && (looksLikeAttachment || ct.includes('octet-stream') || ct.includes('spreadsheetml'));
+                } catch {
+                  return false;
+                }
+              },
+              { timeout: exportTimeoutMs }
+            )
+            .then((resp) => ({ kind: 'xlsx-response' as const, resp }))
+            .catch((e) => ({ kind: 'xlsx-timeout' as const, error: String(e) }));
 
-        // If KiotViet shows a toast/link that requires clicking to download, click it.
-        // We poll until download happens or timeout.
-        const start = Date.now();
-        let exported = false;
+          await withRetries(() => exportSelectedOrdersDetail(page), {
+            retries: 2,
+            delayMs: 500,
+            label: 'exportSelectedOrdersDetail'
+          });
 
-        let toastClicks = 0;
-        let toastSeen = 0;
+          const start = Date.now();
+          let toastClicks = 0;
+          let toastSeen = 0;
 
-        while (!exported && Date.now() - start < exportTimeoutMs) {
-          const clickedToast = await clickToastDownloadLinkIfPresent(page).catch(() => false);
-          if (clickedToast) toastClicks++;
+          while (Date.now() - start < exportTimeoutMs) {
+            const clickedToast = await clickToastDownloadLinkIfPresent(page).catch(() => false);
+            if (clickedToast) toastClicks++;
 
-          const toastLink = page.locator('text=tải xuống').first();
-          if ((await toastLink.count().catch(() => 0)) > 0) toastSeen++;
+            const toastLink = page.locator('text=tải xuống').first();
+            if ((await toastLink.count().catch(() => 0)) > 0) toastSeen++;
 
-          const maybeDownload = await Promise.race([
-            downloadEventPromise,
-            xlsxResponsePromise,
-            page.waitForTimeout(500).then(() => ({ kind: 'tick' as const }))
-          ]);
+            const maybeDownload = await Promise.race([
+              downloadEventPromise,
+              xlsxResponsePromise,
+              page.waitForTimeout(500).then(() => ({ kind: 'tick' as const }))
+            ]);
 
-          if (maybeDownload.kind === 'tick') continue;
+            if (maybeDownload.kind === 'tick') continue;
 
-          const ts = format(new Date(), 'yyyyMMdd_HHmmss');
-          let outPath: string;
+            const ts = format(new Date(), 'yyyyMMdd_HHmmss');
+            if (maybeDownload.kind === 'download') {
+              const download = maybeDownload.d;
+              const suggested = download.suggestedFilename();
+              const outName = `${ts}_orders_detail_${suggested}`;
+              outPath = path.join(downloadsDir, outName);
+              await download.saveAs(outPath);
+              break;
+            }
 
-          if (maybeDownload.kind === 'download') {
-            const download = maybeDownload.d;
-            const suggested = download.suggestedFilename();
-            const outName = `${ts}_orders_detail_${suggested}`;
-            outPath = path.join(downloadsDir, outName);
-            await download.saveAs(outPath);
-          } else if (maybeDownload.kind === 'xlsx-response') {
-            const resp = maybeDownload.resp;
-            const urlFile = resp.url().split('?')[0]?.split('/').pop() || 'orders.xlsx';
-            const safeName = urlFile.toLowerCase().endsWith('.xlsx') ? urlFile : `${urlFile}.xlsx`;
-            const outName = `${ts}_orders_detail_${safeName}`;
-            outPath = path.join(downloadsDir, outName);
-            const buf = await resp.body();
-            await fs.writeFile(outPath, buf);
-          } else {
+            if (maybeDownload.kind === 'xlsx-response') {
+              const resp = maybeDownload.resp;
+              const urlFile = resp.url().split('?')[0]?.split('/').pop() || 'orders.xlsx';
+              const safeName = urlFile.toLowerCase().endsWith('.xlsx') ? urlFile : `${urlFile}.xlsx`;
+              const outName = `${ts}_orders_detail_${safeName}`;
+              outPath = path.join(downloadsDir, outName);
+              const buf = await resp.body();
+              await fs.writeFile(outPath, buf);
+              break;
+            }
+
             // one of the timeout sentinels
-            throw new Error(
-              `Export download did not start. download=${'error' in maybeDownload ? maybeDownload.error : 'unknown'} toastClicks=${toastClicks} toastSeen=${toastSeen}`
-            );
+            break;
           }
 
-          log('export:downloaded', { outPath });
+          if (outPath) {
+            log('export:downloaded', { outPath, exportAttempt });
+            break;
+          }
 
-          const table = await parseFirstSheetAsTable(outPath);
-          const payload = {
-            meta: {
-              exportedAtIso: isoVietnam(new Date()),
-              ordersUrl,
-              timePreset,
-              orderCodes: selectedOrderCodes,
-              downloadedPath: outPath,
-              rows: table.rows.length
-            },
-            headers: table.headers,
-            rows: table.rows
-          };
+          const downloadWait = await downloadEventPromise;
+          const xlsxWait = await xlsxResponsePromise;
+          const reason = `download=${'error' in downloadWait ? downloadWait.error : 'unknown'} xlsx=${'error' in xlsxWait ? xlsxWait.error : 'unknown'}`;
+
+          if (exportAttempt < 2) {
+            log('export:retry', { exportAttempt, reason });
+            await page.keyboard.press('Escape').catch(() => undefined);
+            await page.waitForTimeout(400);
+            continue;
+          }
+
+          throw new Error(`Export download did not start after retries. ${reason}`);
+        }
+
+        if (!outPath) {
+          throw new Error('Export triggered but no download was captured within timeout.');
+        }
+
+        const table = await parseFirstSheetAsTable(outPath);
+        const payload = {
+          meta: {
+            exportedAtIso: isoVietnam(new Date()),
+            ordersUrl,
+            timePreset,
+            orderCodes: selectedOrderCodes,
+            downloadedPath: outPath,
+            rows: table.rows.length
+          },
+          headers: table.headers,
+          rows: table.rows
+        };
 
           // Verify export contains at least 1 row per selected order code.
           const key = 'Mã đặt hàng';
@@ -567,15 +607,10 @@ export async function runOrdersWatch() {
             label: 'clearSelectedOrders(after:page1)'
           });
 
-          exported = true;
-        }
-
-        if (!exported) {
-          throw new Error('Export triggered but no download was captured within timeout.');
-        }
-
         log('poll:wait', { pollIntervalMs });
         await sleep(pollIntervalMs);
+
+        consecutiveErrors = 0;
 
         if (maxPolls > 0 && pollCount >= maxPolls) {
           log('poll:stop', { pollCount, maxPolls });
@@ -584,6 +619,13 @@ export async function runOrdersWatch() {
 
         continue;
       } catch (e) {
+        totalErrors++;
+        consecutiveErrors++;
+
+        const message = String(e);
+        const isFatalDownloadError =
+          message.includes('Export download did not start') || message.includes('Export triggered but no download was captured');
+
         // If we were logged out mid-flow, re-login and continue quickly.
         const relogged = await ensureKiotvietSession(page, {
           baseUrl: cfg.kiotviet.baseUrl,
@@ -598,17 +640,44 @@ export async function runOrdersWatch() {
           continue;
         }
 
+        if (maxConsecutiveErrors > 0 && consecutiveErrors >= maxConsecutiveErrors) {
+          log('poll:abort:too-many-errors', {
+            consecutiveErrors,
+            maxConsecutiveErrors,
+            pollCount,
+            maxPolls,
+            ranMs: Date.now() - startedAtMs
+          });
+          throw e;
+        }
+
+        if (isPastMaxRunTime()) {
+          log('poll:abort:max-run-time-after-errors', {
+            pollCount,
+            maxPolls,
+            maxRunMs,
+            ranMs: Date.now() - startedAtMs,
+            totalErrors
+          });
+          throw e;
+        }
+
         const id = `${stamp()}_orders_error`;
 
         const shot = await saveScreenshot(page, `${id}.png`).catch(() => undefined);
         const dump = await diag.dump(id).catch(() => undefined);
         log('error', {
-          message: String(e),
+          message,
           url: page.url(),
           screenshot: shot,
           diagnosticsJson: dump?.jsonPath,
           pageHtml: dump?.htmlPath
         });
+
+        if (isFatalDownloadError) {
+          throw e;
+        }
+
         await sleep(pollIntervalMs);
 
         if (maxPolls > 0 && pollCount >= maxPolls) {

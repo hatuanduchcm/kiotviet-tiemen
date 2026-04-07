@@ -485,13 +485,35 @@ export async function clearSelectedOrders(page: Page) {
  * (e.g. "Nhấn vào đây để tải xuống") to start the actual browser download.
  */
 export async function clickToastDownloadLinkIfPresent(page: Page) {
-  const link = page
-    .locator('text=Nhấn vào đây để tải xuống')
-    .or(page.locator('a:has-text("Nhấn vào đây")'))
+  const toastContainers = page.locator('.k-notification, .k-notification-wrap, .toast').filter({ hasText: /tải\s*xuống/i });
+
+  const inToastClickable = toastContainers
+    .locator('a,button,[role="button"],[role="link"],span')
+    .filter({ hasText: /tải\s*xuống/i })
     .first();
 
-  if ((await link.count()) === 0) return false;
-  if (!(await link.isVisible().catch(() => false))) return false;
-  await link.click().catch(() => undefined);
-  return true;
+  const inToastAny = toastContainers.first();
+
+  const globalClickable = page
+    .locator('a,button,[role="button"],[role="link"]')
+    .filter({ hasText: /tải\s*xuống/i })
+    .first();
+
+  const legacyText = page
+    .locator('text=/Nhấn\s+vào\s+đây.*tải\s*xuống/i')
+    .first();
+
+  const candidates = [inToastClickable, inToastAny, globalClickable, legacyText];
+
+  for (const c of candidates) {
+    if ((await c.count().catch(() => 0)) === 0) continue;
+    if (!(await c.isVisible().catch(() => false))) continue;
+    const ok = await c
+      .click({ force: true, timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (ok) return true;
+  }
+
+  return false;
 }
