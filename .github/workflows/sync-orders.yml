@@ -1,0 +1,80 @@
+name: Sync KiotViet Orders
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  schedule:
+    # GitHub cron is UTC. Vietnam is UTC+7.
+    # 08:00–20:00 (VN) == 01:00–13:00 (UTC)
+    - cron: '*/10 1-13 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sync-orders-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync orders (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+
+    # Use GitHub Environments to separate secrets for develop vs prod.
+    # Schedules always run on the default branch (typically main) so we treat them as prod.
+    environment: ${{ (github.event_name == 'schedule' || github.ref_name == 'main') && 'prod' || 'develop' }}
+
+    # Safety: don't run scheduled jobs on non-main branches.
+    if: ${{ github.event_name != 'schedule' || github.ref_name == 'main' }}
+
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Write Google service account key
+        shell: bash
+        run: |
+          mkdir -p .secrets
+          # Secret must contain the full JSON content
+          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY_JSON }}' > .secrets/kiotviet-service-account.json
+
+      - name: Run sync (single poll)
+        env:
+          # KiotViet
+          KIOTVIET_BASE_URL: ${{ secrets.KIOTVIET_BASE_URL }}
+          KIOTVIET_USERNAME: ${{ secrets.KIOTVIET_USERNAME }}
+          KIOTVIET_PASSWORD: ${{ secrets.KIOTVIET_PASSWORD }}
+
+          # Browser
+          HEADLESS: 'true'
+          SLOW_MO_MS: '0'
+          TIMEOUT_MS: ${{ vars.TIMEOUT_MS || '45000' }}
+
+          # Orders
+          ORDERS_URL: ${{ vars.ORDERS_URL }}
+          ORDERS_TIME_PRESET: ${{ vars.ORDERS_TIME_PRESET || 'Hôm nay' }}
+          ORDERS_POLL_INTERVAL_MS: ${{ vars.ORDERS_POLL_INTERVAL_MS || '10000' }}
+          ORDERS_EXPORT_TIMEOUT_MS: ${{ vars.ORDERS_EXPORT_TIMEOUT_MS || '120000' }}
+          ORDERS_MAX_POLLS: ${{ vars.ORDERS_MAX_POLLS || '1' }}
+          ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD: ${{ vars.ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD || 'true' }}
+
+          # Google Sheets
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEET_TAB_NAME: ${{ secrets.GOOGLE_SHEET_TAB_NAME }}
+          GOOGLE_SERVICE_ACCOUNT_KEY_FILE: .secrets/kiotviet-service-account.json
+
+        run: npm run sync -- orders

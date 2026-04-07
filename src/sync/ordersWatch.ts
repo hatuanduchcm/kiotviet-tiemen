@@ -59,6 +59,9 @@ export async function runOrdersWatch() {
     const pollIntervalMs = cfg.orders?.pollIntervalMs ?? 60_000;
     const timePreset = cfg.orders?.timePresetLabel ?? 'Tuần này';
 
+    const maxPolls = cfg.orders?.maxPolls ?? 0; // 0 = unlimited
+    let pollCount = 0;
+
     const exportTimeoutMs = cfg.orders?.exportTimeoutMs ?? 120_000;
     const deleteDownloadedAfterUpload = cfg.orders?.deleteDownloadedAfterUpload ?? true;
 
@@ -95,6 +98,7 @@ export async function runOrdersWatch() {
 
     // Main polling loop.
     while (true) {
+      pollCount++;
       try {
         // Session can expire; if we got redirected to login, re-authenticate first.
         await withRetries(
@@ -519,6 +523,12 @@ export async function runOrdersWatch() {
 
         log('poll:wait', { pollIntervalMs });
         await sleep(pollIntervalMs);
+
+        if (maxPolls > 0 && pollCount >= maxPolls) {
+          log('poll:stop', { pollCount, maxPolls });
+          return;
+        }
+
         continue;
       } catch (e) {
         // If we were logged out mid-flow, re-login and continue quickly.
@@ -537,14 +547,6 @@ export async function runOrdersWatch() {
 
         const id = `${stamp()}_orders_error`;
 
-        // If tracing is enabled, flush a trace bundle for this error.
-        if (cfg.browser.trace.enabled) {
-          const tracePath = path.resolve('.storage', `${id}.trace.zip`);
-          await context.tracing.stop({ path: tracePath }).catch(() => undefined);
-          await context.tracing.start({ screenshots: true, snapshots: true, sources: true }).catch(() => undefined);
-          log('trace:saved', { tracePath });
-        }
-
         const shot = await saveScreenshot(page, `${id}.png`).catch(() => undefined);
         const dump = await diag.dump(id).catch(() => undefined);
         log('error', {
@@ -555,6 +557,12 @@ export async function runOrdersWatch() {
           pageHtml: dump?.htmlPath
         });
         await sleep(pollIntervalMs);
+
+        if (maxPolls > 0 && pollCount >= maxPolls) {
+          log('poll:stop', { pollCount, maxPolls });
+          return;
+        }
+
         continue;
       }
     }

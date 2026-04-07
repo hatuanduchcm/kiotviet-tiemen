@@ -15,17 +15,8 @@ export async function withBrowser<T>(fn: (b: BrowserBundle) => Promise<T>): Prom
   const downloadsDir = path.resolve('downloads');
   const storageDir = path.resolve('.storage');
 
-  // Trace is optional at runtime (config may be edited/partially loaded).
-  const traceCfg = (cfg as any)?.browser?.trace as { enabled?: boolean; path?: string } | undefined;
-  const tracingEnabled = !!traceCfg?.enabled;
-  const traceOutPath = path.resolve(traceCfg?.path || '.storage/trace.zip');
-  const traceOutDir = path.dirname(traceOutPath);
-
   await fs.mkdir(downloadsDir, { recursive: true });
   await fs.mkdir(storageDir, { recursive: true });
-  if (tracingEnabled) {
-    await fs.mkdir(traceOutDir, { recursive: true });
-  }
 
   const browser = await chromium.launch({
     headless: cfg.browser.headless,
@@ -42,16 +33,9 @@ export async function withBrowser<T>(fn: (b: BrowserBundle) => Promise<T>): Prom
 
   const page = await context.newPage();
 
-  if (tracingEnabled) {
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
-  }
-
   try {
     return await fn({ browser, context, page, downloadsDir });
   } finally {
-    if (tracingEnabled) {
-      await context.tracing.stop({ path: traceOutPath }).catch(() => undefined);
-    }
     await context.close().catch(() => undefined);
     await browser.close().catch(() => undefined);
   }

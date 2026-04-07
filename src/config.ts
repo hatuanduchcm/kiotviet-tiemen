@@ -23,6 +23,7 @@ const EnvSchema = z.object({
   ORDERS_TIME_PRESET: z.string().optional(),
   ORDERS_POLL_INTERVAL_MS: z.string().optional(),
   ORDERS_EXPORT_TIMEOUT_MS: z.string().optional(),
+  ORDERS_MAX_POLLS: z.string().optional(),
   HEADLESS: z.string().optional(),
   SLOW_MO_MS: z.string().optional(),
   TIMEOUT_MS: z.string().optional(),
@@ -47,6 +48,7 @@ export type AppConfig = {
     timePresetLabel?: string;
     pollIntervalMs?: number;
     exportTimeoutMs?: number;
+    maxPolls?: number;
     deleteDownloadedAfterUpload?: boolean;
   };
   browser: {
@@ -80,6 +82,7 @@ export function loadConfig(): AppConfig {
       timePresetLabel: parsed.ORDERS_TIME_PRESET?.trim() || undefined,
       pollIntervalMs: numberFromString(parsed.ORDERS_POLL_INTERVAL_MS, 60_000),
       exportTimeoutMs: numberFromString(parsed.ORDERS_EXPORT_TIMEOUT_MS, 120_000),
+      maxPolls: numberFromString(parsed.ORDERS_MAX_POLLS, 0),
       deleteDownloadedAfterUpload: boolFromString(parsed.ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD, true)
     },
     browser: {
