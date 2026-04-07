@@ -44,7 +44,7 @@ export async function runOrdersWatch() {
   const { cache, cachePath } = await loadOrdersCache();
   const log = createStepLogger('orders');
 
-  await withBrowser(async ({ page, downloadsDir }) => {
+  await withBrowser(async ({ page, downloadsDir, context }) => {
     const diag = attachPageDiagnostics(page);
 
     log('login:start');
@@ -536,6 +536,15 @@ export async function runOrdersWatch() {
         }
 
         const id = `${stamp()}_orders_error`;
+
+        // If tracing is enabled, flush a trace bundle for this error.
+        if (cfg.browser.trace.enabled) {
+          const tracePath = path.resolve('.storage', `${id}.trace.zip`);
+          await context.tracing.stop({ path: tracePath }).catch(() => undefined);
+          await context.tracing.start({ screenshots: true, snapshots: true, sources: true }).catch(() => undefined);
+          log('trace:saved', { tracePath });
+        }
+
         const shot = await saveScreenshot(page, `${id}.png`).catch(() => undefined);
         const dump = await diag.dump(id).catch(() => undefined);
         log('error', {

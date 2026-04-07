@@ -28,8 +28,6 @@ const EnvSchema = z.object({
   TIMEOUT_MS: z.string().optional(),
   STOP_AFTER_LOGIN: z.string().optional(),
   STOP_AFTER_LOGIN_MS: z.string().optional(),
-  TRACE: z.string().optional(),
-  TRACE_PATH: z.string().optional(),
   GOOGLE_SHEET_ID: z.string().optional(),
   GOOGLE_SHEET_TAB_NAME: z.string().optional(),
   GOOGLE_SERVICE_ACCOUNT_KEY_FILE: z.string().optional(),
@@ -58,10 +56,6 @@ export type AppConfig = {
     stopAfterLogin: {
       enabled: boolean;
       ms: number;
-    };
-    trace: {
-      enabled: boolean;
-      path: string;
     };
   };
   google: {
@@ -95,10 +89,6 @@ export function loadConfig(): AppConfig {
       stopAfterLogin: {
         enabled: boolFromString(parsed.STOP_AFTER_LOGIN, false),
         ms: numberFromString(parsed.STOP_AFTER_LOGIN_MS, 60_000)
-      },
-      trace: {
-        enabled: boolFromString(parsed.TRACE, false),
-        path: (parsed.TRACE_PATH?.trim() || '.storage/trace.zip')
       }
     },
     google: {

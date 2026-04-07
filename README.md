@@ -47,10 +47,18 @@ To see the browser window:
 To debug headless runs with trace:
 1) Set `TRACE=true` in `.env` (default trace path is `.storage/trace.zip`)
 2) Run `npm run sync -- orders`
-3) Open trace viewer:
+3) If you stop the process (Ctrl+C), Playwright will write the trace file.
+	Also, when `TRACE=true`, this project saves an additional trace on each error to `.storage/*_orders_error.trace.zip`.
+4) Open trace viewer:
 
 ```bash
 npx playwright show-trace .storage/trace.zip
+```
+
+Or open an error trace:
+
+```bash
+npx playwright show-trace .storage/<timestamp>_orders_error.trace.zip
 ```
 
 ## Customize
