@@ -1,5 +1,5 @@
 import type { Page } from 'playwright';
-import { clickAnyVisible, clickFirstMatching, waitForAnyVisible } from '../kiotviet/selectors.js';
+import { clickAnyVisible, clickFirstMatching, dismissOverlays, waitForAnyVisible } from '../kiotviet/selectors.js';
 import type { OrderListItem } from './types.js';
 
 export type OrdersPageConfig = {
@@ -185,6 +185,8 @@ export async function gotoOrdersPage(page: Page, url: string) {
  * - This implementation uses robust "click-by-text" fallbacks.
  */
 export async function selectBranchAll(page: Page) {
+  await dismissOverlays(page).catch(() => undefined);
+
   // Try opening the branch dropdown.
   // Common patterns: click the filter label or the input container.
   await clickFirstMatching(page, [
@@ -195,6 +197,8 @@ export async function selectBranchAll(page: Page) {
     '.kv-multi-select',
     '.kv-select'
   ]).catch(() => undefined);
+
+  await dismissOverlays(page).catch(() => undefined);
 
   // Ensure dropdown list is visible, then choose "Tất cả".
   await waitForAnyVisible(page, ['text=Tất cả', 'li:has-text("Tất cả")'], 10_000);
