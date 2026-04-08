@@ -111,4 +111,5 @@ jobs:
             .storage/**/*.html
             .storage/**/*.json
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
