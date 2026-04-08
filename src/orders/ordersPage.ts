@@ -93,10 +93,27 @@ export async function refreshOrdersGrid(page: Page) {
 
   await search.waitFor({ state: 'visible', timeout: 15_000 });
   await search.scrollIntoViewIfNeeded().catch(() => undefined);
-  await search.click({ timeout: 5_000 });
-  await search.press('Control+A').catch(() => undefined);
-  await search.press('Backspace').catch(() => undefined);
-  await search.press('Enter');
+
+  // CI/headless: sometimes a modal mask intercepts clicks. Avoid click and use DOM focus instead.
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press('Escape').catch(() => undefined);
+    const modalMask = page.locator('.v-modal-mask, .k-overlay').first();
+    await modalMask.waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => undefined);
+
+    const ok = await search
+      .evaluate((el) => {
+        const input = el as any;
+        input.focus?.();
+        input.value = '';
+        input.dispatchEvent?.(new (globalThis as any).Event('input', { bubbles: true }));
+        input.dispatchEvent?.(new (globalThis as any).Event('change', { bubbles: true }));
+      })
+      .then(() => true)
+      .catch(() => false);
+    if (ok) break;
+  }
+
+  await page.keyboard.press('Enter');
 
   // Best-effort wait for Kendo loading mask.
   const mask = page.locator('#grdOrders .k-loading-mask, .k-loading-mask').first();

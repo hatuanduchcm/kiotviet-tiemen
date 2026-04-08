@@ -704,7 +704,7 @@ export async function runOrdersWatch() {
 
         if (shouldStopByPollCount()) {
           stopByPollCount('after-error');
-          return;
+          throw e;
         }
 
         if (isFatalDownloadError) {
