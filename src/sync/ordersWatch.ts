@@ -77,6 +77,19 @@ export async function runOrdersWatch() {
 
     const exportTimeoutMs = cfg.orders?.exportTimeoutMs ?? 120_000;
     const deleteDownloadedAfterUpload = cfg.orders?.deleteDownloadedAfterUpload ?? true;
+    const debugSimulateError = (cfg.orders?.debugSimulateError ?? '').toLowerCase();
+    const maybeSimulateError = (point:
+      | 'after-login'
+      | 'after-navigate'
+      | 'after-refresh'
+      | 'after-grid-read'
+      | 'before-export') => {
+      if (!debugSimulateError) return;
+      if (debugSimulateError === '1' || debugSimulateError === 'true' || debugSimulateError === point) {
+        throw new Error(`SimulatedError: ${point}`);
+      }
+    };
+  maybeSimulateError('after-login');
 
     const googleSheetId = cfg.google.sheetId;
     const googleTabName = cfg.google.tabName ?? 'PurchaseOrders';
@@ -145,6 +158,7 @@ export async function runOrdersWatch() {
           },
           { retries: 3, delayMs: 750, label: 'gotoOrdersPage' }
         );
+        maybeSimulateError('after-navigate');
 
         // Some setups redirect to login after navigation.
         await withRetries(
@@ -188,6 +202,7 @@ export async function runOrdersWatch() {
           },
           { retries: 3, delayMs: 750, label: 'refreshOrdersGrid' }
         );
+        maybeSimulateError('after-refresh');
 
         // Ensure we start from page 1 and sorted by time desc before scanning.
         await gotoFirstOrdersPagerPage(page);
@@ -202,6 +217,7 @@ export async function runOrdersWatch() {
         });
         const orderCodesInList = items.map((x) => x.orderCode);
         log('grid:read:ok', { count: orderCodesInList.length, top: orderCodesInList.slice(0, 5) });
+        maybeSimulateError('after-grid-read');
 
         if (cache.lastSnapshot === null) {
           // First run (or cache reset): establish snapshot baseline.
@@ -384,6 +400,7 @@ export async function runOrdersWatch() {
         }
 
         log('orders:new-detected', { newOrderCodes: selectedOrderCodes });
+  maybeSimulateError('before-export');
 
         // Small pause so the UI updates selected state.
         await page.waitForTimeout(300);
@@ -647,25 +664,29 @@ export async function runOrdersWatch() {
         consecutiveErrors++;
 
         const message = String(e);
+        const isSimulatedError = message.includes('SimulatedError:');
         const isFatalDownloadError =
           message.includes('Export download did not start') || message.includes('Export triggered but no download was captured');
 
         // If we were logged out mid-flow, re-login and continue quickly.
-        const relogged = await ensureKiotvietSession(page, {
-          baseUrl: cfg.kiotviet.baseUrl,
-          username: cfg.kiotviet.username,
-          password: cfg.kiotviet.password,
-          reason: 'catch:logged-out',
-          log
-        }).catch(() => false);
+        if (!isSimulatedError) {
+          // If we were logged out mid-flow, re-login and continue quickly.
+          const relogged = await ensureKiotvietSession(page, {
+            baseUrl: cfg.kiotviet.baseUrl,
+            username: cfg.kiotviet.username,
+            password: cfg.kiotviet.password,
+            reason: 'catch:logged-out',
+            log
+          }).catch(() => false);
 
-        if (relogged) {
-          if (shouldStopByPollCount()) {
-            stopByPollCount('relogged');
-            return;
+          if (relogged) {
+            if (shouldStopByPollCount()) {
+              stopByPollCount('relogged');
+              return;
+            }
+            await sleep(Math.min(2_000, pollIntervalMs));
+            continue;
           }
-          await sleep(Math.min(2_000, pollIntervalMs));
-          continue;
         }
 
         if (maxConsecutiveErrors > 0 && consecutiveErrors >= maxConsecutiveErrors) {
@@ -701,6 +722,10 @@ export async function runOrdersWatch() {
           diagnosticsJson: dump?.jsonPath,
           pageHtml: dump?.htmlPath
         });
+
+        if (isSimulatedError) {
+          throw e;
+        }
 
         if (shouldStopByPollCount()) {
           stopByPollCount('after-error');
