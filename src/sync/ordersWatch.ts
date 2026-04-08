@@ -626,6 +626,11 @@ export async function runOrdersWatch() {
             label: 'clearSelectedOrders(after:page1)'
           });
 
+        if (shouldStopByPollCount()) {
+          stopByPollCount('after-success');
+          return;
+        }
+
         log('poll:wait', { pollIntervalMs });
         await sleep(pollIntervalMs);
 
@@ -696,6 +701,11 @@ export async function runOrdersWatch() {
           diagnosticsJson: dump?.jsonPath,
           pageHtml: dump?.htmlPath
         });
+
+        if (shouldStopByPollCount()) {
+          stopByPollCount('after-error');
+          return;
+        }
 
         if (isFatalDownloadError) {
           throw e;

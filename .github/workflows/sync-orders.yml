@@ -8,7 +8,8 @@ on:
   schedule:
     # GitHub cron is UTC. Vietnam is UTC+7.
     # 08:00–20:00 (VN) == 01:00–13:00 (UTC)
-    - cron: '*/10 1-13 * * *'
+    # Every 10 minutes from 08:00 to 19:50 (VN)
+    - cron: '*/10 1-12 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -61,7 +62,7 @@ jobs:
           # Secret must contain the full JSON content
           echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY_JSON }}' > .secrets/kiotviet-service-account.json
 
-      - name: Run sync (single poll)
+      - name: Run sync
         env:
           # KiotViet
           KIOTVIET_BASE_URL: ${{ secrets.KIOTVIET_BASE_URL }}
@@ -78,6 +79,9 @@ jobs:
           ORDERS_TIME_PRESET: ${{ vars.ORDERS_TIME_PRESET || 'Hôm nay' }}
           ORDERS_POLL_INTERVAL_MS: ${{ vars.ORDERS_POLL_INTERVAL_MS || '10000' }}
           ORDERS_EXPORT_TIMEOUT_MS: ${{ vars.ORDERS_EXPORT_TIMEOUT_MS || '30000' }}
+          # Run exactly one scan/export pass per workflow run.
+          # If there are new orders, the run exports/uploads them and exits.
+          # If there are no new orders, the run exits quickly.
           ORDERS_MAX_POLLS: ${{ vars.ORDERS_MAX_POLLS || '1' }}
           # Develop safeguard: stop the watcher after ~5 minutes.
           # Prod/schedule can override via vars or keep unlimited (0).

@@ -70,6 +70,8 @@ Instead, we run the sync on a cron schedule.
 - Prod schedule: every 10 minutes from 08:00 to 20:00 (Vietnam time, UTC+7)
 - GitHub cron uses UTC, so the workflow uses 01:00–13:00 UTC
 
+Each scheduled run performs a single scan/export/upload pass and then exits.
+
 ### 1) Create Environments
 In your GitHub repo:
 1) Settings → Environments
@@ -106,6 +108,10 @@ You can configure these as Environment Variables (Settings → Environments → 
 - `ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD` (default: `true`)
 
 Note: the script is a watcher by default; in GitHub Actions we set `ORDERS_MAX_POLLS=1` so the job finishes.
+
+Changing Environment Variables/Secrets does not require a code change.
+The next scheduled run will pick up the new values automatically.
+If you want to apply changes immediately, use `workflow_dispatch` (Run workflow).
 
 Additional safeguards:
 - In **develop** runs, the workflow limits job runtime to ~5 minutes and sets `ORDERS_MAX_RUN_MS=300000` by default.
