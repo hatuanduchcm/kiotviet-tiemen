@@ -26,7 +26,6 @@ const EnvSchema = z.object({
   ORDERS_MAX_POLLS: z.string().optional(),
   ORDERS_MAX_RUN_MS: z.string().optional(),
   ORDERS_MAX_CONSECUTIVE_ERRORS: z.string().optional(),
-  ORDERS_DEBUG_SIMULATE_ERROR: z.string().optional(),
   HEADLESS: z.string().optional(),
   SLOW_MO_MS: z.string().optional(),
   TIMEOUT_MS: z.string().optional(),
@@ -83,7 +82,6 @@ export type AppConfig = {
     maxPolls?: number;
     maxRunMs?: number;
     maxConsecutiveErrors?: number;
-    debugSimulateError?: string;
     deleteDownloadedAfterUpload?: boolean;
   };
   browser: {
@@ -120,7 +118,6 @@ export function loadConfig(): AppConfig {
       maxPolls: numberFromString(parsed.ORDERS_MAX_POLLS, 0),
       maxRunMs: numberFromString(parsed.ORDERS_MAX_RUN_MS, 0),
       maxConsecutiveErrors: numberFromString(parsed.ORDERS_MAX_CONSECUTIVE_ERRORS, 0),
-      debugSimulateError: parsed.ORDERS_DEBUG_SIMULATE_ERROR?.trim() || undefined,
       deleteDownloadedAfterUpload: boolFromString(parsed.ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD, true)
     },
     browser: {

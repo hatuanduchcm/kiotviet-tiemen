@@ -77,28 +77,6 @@ export async function runOrdersWatch() {
 
     const exportTimeoutMs = cfg.orders?.exportTimeoutMs ?? 120_000;
     const deleteDownloadedAfterUpload = cfg.orders?.deleteDownloadedAfterUpload ?? true;
-    const debugSimulateError = (cfg.orders?.debugSimulateError ?? '').toLowerCase();
-    const maybeSimulateError = async (
-      point: 'after-login' | 'after-navigate' | 'after-refresh' | 'after-grid-read' | 'before-export'
-    ) => {
-      if (!debugSimulateError) return;
-      if (!(debugSimulateError === '1' || debugSimulateError === 'true' || debugSimulateError === point)) return;
-
-      const id = `${stamp()}_orders_simulated_error_${point}`;
-      const shot = await saveScreenshot(page, `${id}.png`).catch(() => undefined);
-      const dump = await diag.dump(id).catch(() => undefined);
-      log('debug:simulated-error', {
-        point,
-        url: page.url(),
-        screenshot: shot,
-        diagnosticsJson: dump?.jsonPath,
-        pageHtml: dump?.htmlPath
-      });
-
-      throw new Error(`SimulatedError: ${point}`);
-    };
-
-    await maybeSimulateError('after-login');
 
     const googleSheetId = cfg.google.sheetId;
     const googleTabName = cfg.google.tabName ?? 'PurchaseOrders';
@@ -167,7 +145,6 @@ export async function runOrdersWatch() {
           },
           { retries: 3, delayMs: 750, label: 'gotoOrdersPage' }
         );
-        await maybeSimulateError('after-navigate');
 
         // Some setups redirect to login after navigation.
         await withRetries(
@@ -201,7 +178,9 @@ export async function runOrdersWatch() {
             await selectTimePreset(page, timePreset);
           },
           { retries: 3, delayMs: 750, label: 'selectTimePreset' }
-        );
+        ).catch((e) => {
+          throw new Error(`FatalConfigError: failed to apply ORDERS_TIME_PRESET=${JSON.stringify(timePreset)}. ${String(e)}`);
+        });
 
         // Force a refresh so we pick up orders created while the page is already open.
         await withRetries(
@@ -211,7 +190,6 @@ export async function runOrdersWatch() {
           },
           { retries: 3, delayMs: 750, label: 'refreshOrdersGrid' }
         );
-        await maybeSimulateError('after-refresh');
 
         // Ensure we start from page 1 and sorted by time desc before scanning.
         await gotoFirstOrdersPagerPage(page);
@@ -226,7 +204,6 @@ export async function runOrdersWatch() {
         });
         const orderCodesInList = items.map((x) => x.orderCode);
         log('grid:read:ok', { count: orderCodesInList.length, top: orderCodesInList.slice(0, 5) });
-        await maybeSimulateError('after-grid-read');
 
         if (cache.lastSnapshot === null) {
           // First run (or cache reset): establish snapshot baseline.
@@ -409,7 +386,6 @@ export async function runOrdersWatch() {
         }
 
         log('orders:new-detected', { newOrderCodes: selectedOrderCodes });
-      await maybeSimulateError('before-export');
 
         // Small pause so the UI updates selected state.
         await page.waitForTimeout(300);
@@ -673,29 +649,26 @@ export async function runOrdersWatch() {
         consecutiveErrors++;
 
         const message = String(e);
-        const isSimulatedError = message.includes('SimulatedError:');
+        const isFatalConfigError = message.includes('FatalConfigError:');
         const isFatalDownloadError =
           message.includes('Export download did not start') || message.includes('Export triggered but no download was captured');
 
         // If we were logged out mid-flow, re-login and continue quickly.
-        if (!isSimulatedError) {
-          // If we were logged out mid-flow, re-login and continue quickly.
-          const relogged = await ensureKiotvietSession(page, {
-            baseUrl: cfg.kiotviet.baseUrl,
-            username: cfg.kiotviet.username,
-            password: cfg.kiotviet.password,
-            reason: 'catch:logged-out',
-            log
-          }).catch(() => false);
+        const relogged = await ensureKiotvietSession(page, {
+          baseUrl: cfg.kiotviet.baseUrl,
+          username: cfg.kiotviet.username,
+          password: cfg.kiotviet.password,
+          reason: 'catch:logged-out',
+          log
+        }).catch(() => false);
 
-          if (relogged) {
-            if (shouldStopByPollCount()) {
-              stopByPollCount('relogged');
-              return;
-            }
-            await sleep(Math.min(2_000, pollIntervalMs));
-            continue;
+        if (relogged) {
+          if (shouldStopByPollCount()) {
+            stopByPollCount('relogged');
+            return;
           }
+          await sleep(Math.min(2_000, pollIntervalMs));
+          continue;
         }
 
         if (maxConsecutiveErrors > 0 && consecutiveErrors >= maxConsecutiveErrors) {
@@ -732,12 +705,12 @@ export async function runOrdersWatch() {
           pageHtml: dump?.htmlPath
         });
 
-        if (isSimulatedError) {
+        if (shouldStopByPollCount()) {
+          stopByPollCount('after-error');
           throw e;
         }
 
-        if (shouldStopByPollCount()) {
-          stopByPollCount('after-error');
+        if (isFatalConfigError) {
           throw e;
         }
 
