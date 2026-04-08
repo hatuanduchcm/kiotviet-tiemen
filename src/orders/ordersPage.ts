@@ -208,6 +208,28 @@ export async function selectBranchAll(page: Page) {
  * Select a time preset from the quick-range popup (e.g. "Tuần này", "Hôm nay", ...).
  */
 export async function selectTimePreset(page: Page, presetLabel: string) {
+  const dismissOverlays = async () => {
+    await page.keyboard.press('Escape').catch(() => undefined);
+
+    const closeButtons = page.locator(
+      [
+        '.k-window:visible .k-window-actions a',
+        '.k-window:visible .k-i-close',
+        '.k-window:visible button[aria-label="Close"]',
+        'button:has-text("Đóng")',
+        'button:has-text("Close")'
+      ].join(',')
+    );
+    if ((await closeButtons.count().catch(() => 0)) > 0) {
+      await closeButtons.first().click({ force: true, timeout: 1_500 }).catch(() => undefined);
+    }
+
+    const mask = page.locator('.v-modal-mask, .k-overlay').first();
+    await mask.waitFor({ state: 'hidden', timeout: 1_500 }).catch(() => undefined);
+  };
+
+  await dismissOverlays();
+
   // Important: there are multiple time sections (e.g. purchase date vs expected delivery).
   // KiotViet reuses IDs across sections, so we must scope to the *purchase* time filter.
   const picker = page.locator('#purchaseDatePicker').first();
@@ -236,12 +258,13 @@ export async function selectTimePreset(page: Page, presetLabel: string) {
     const el = opener.first();
     if (!(await el.isVisible().catch(() => false))) continue;
     await el.scrollIntoViewIfNeeded().catch(() => undefined);
-    await el.click().catch(() => undefined);
+    await dismissOverlays();
+    await el.click({ force: true, timeout: 2_000 }).catch(() => undefined);
 
     // Wait for a popover to appear (don't click too fast).
     popover = page.locator('.popover-filter').last();
     const becameVisible = await popover
-      .waitFor({ state: 'visible', timeout: 10_000 })
+      .waitFor({ state: 'visible', timeout: 2_500 })
       .then(() => true)
       .catch(() => false);
     if (becameVisible) {
@@ -256,25 +279,40 @@ export async function selectTimePreset(page: Page, presetLabel: string) {
     if ((await kendoPopup.count().catch(() => 0)) === 0) {
       throw new Error('Could not open time preset picker popover.');
     }
-    await kendoPopup
-      .locator('a.kv-btn-chip')
-      .filter({ hasText: presetLabel })
-      .first()
-      .click({ timeout: 10_000 });
+    const chip = kendoPopup.locator('a.kv-btn-chip').filter({ hasText: presetLabel }).first();
+    const visible = await chip
+      .waitFor({ state: 'visible', timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!visible) throw new Error(`Time preset not found: ${presetLabel}`);
+    await dismissOverlays();
+    await chip.click({ force: true, timeout: 5_000 });
   } else {
-    await popover
-      .locator('a.kv-btn-chip')
-      .filter({ hasText: presetLabel })
-      .first()
-      .click({ timeout: 10_000 });
+    const chip = popover.locator('a.kv-btn-chip').filter({ hasText: presetLabel }).first();
+    const visible = await chip
+      .waitFor({ state: 'visible', timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!visible) throw new Error(`Time preset not found: ${presetLabel}`);
+    await dismissOverlays();
+    await chip.click({ force: true, timeout: 5_000 });
   }
 
   // Wait until the selected preset reflects on the left label.
   const start = Date.now();
+  let applied = false;
   while (Date.now() - start < 10_000) {
     const now = (await currentLabelLoc.innerText().catch(() => '')).trim();
-    if (now && now.toLowerCase().includes(presetLabel.toLowerCase())) break;
+    if (now && now.toLowerCase().includes(presetLabel.toLowerCase())) {
+      applied = true;
+      break;
+    }
     await page.waitForTimeout(100);
+  }
+
+  if (!applied) {
+    const now = (await currentLabelLoc.innerText().catch(() => '')).trim();
+    throw new Error(`Time preset did not apply. wanted=${presetLabel} got=${now || '(empty)'}`);
   }
 
   await page.keyboard.press('Escape').catch(() => undefined);
