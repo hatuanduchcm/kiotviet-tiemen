@@ -40,6 +40,35 @@ const EnvSchema = z.object({
   ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD: z.string().optional()
 });
 
+function resolveOrdersUrl(baseUrl: string, raw: string | undefined): string | undefined {
+  const v = raw?.trim();
+  if (!v) return undefined;
+
+  // Full URL
+  if (/^https?:\/\//i.test(v)) return v;
+
+  const base = new URL(baseUrl);
+
+  // Common full SPA route forms
+  if (v.startsWith('/man/#') || v.startsWith('man/#') || v.startsWith('/man/#/') || v.startsWith('man/#/')) {
+    const p = v.startsWith('/') ? v : `/${v}`;
+    return new URL(p, base).toString();
+  }
+
+  // Hash-only form: #/Orders
+  if (v.startsWith('#')) {
+    const u = new URL('/man/', base);
+    u.hash = v; // may contain leading '#'
+    return u.toString();
+  }
+
+  // Accept simple route names: Orders, /Orders
+  const route = v.startsWith('/') ? v : `/${v}`;
+  const u = new URL('/man/', base);
+  u.hash = route; // '/Orders' => '#/Orders'
+  return u.toString();
+}
+
 export type AppConfig = {
   kiotviet: {
     baseUrl: string;
@@ -75,7 +104,7 @@ export type AppConfig = {
 
 export function loadConfig(): AppConfig {
   const parsed = EnvSchema.parse(process.env);
-  const ordersUrl = parsed.ORDERS_URL?.trim();
+  const ordersUrl = resolveOrdersUrl(parsed.KIOTVIET_BASE_URL, parsed.ORDERS_URL);
 
   return {
     kiotviet: {

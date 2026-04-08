@@ -30,8 +30,9 @@ jobs:
     # Schedules always run on the default branch (typically main) so we treat them as prod.
     environment: ${{ (github.event_name == 'schedule' || github.ref_name == 'main') && 'prod' || 'develop' }}
 
-    # Safety: don't run scheduled jobs on non-main branches.
-    if: ${{ github.event_name != 'schedule' || github.ref_name == 'main' }}
+    # Schedule always runs on the repository default branch.
+    # Allow scheduled runs only on default branch to avoid accidental schedule runs on other branches.
+    if: ${{ github.event_name != 'schedule' || github.ref_name == github.event.repository.default_branch }}
 
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.ref_name == 'main') && 30 || 5 }}
 
@@ -70,7 +71,7 @@ jobs:
       - name: Run sync
         env:
           # KiotViet
-          KIOTVIET_BASE_URL: ${{ secrets.KIOTVIET_BASE_URL }}
+          KIOTVIET_BASE_URL: ${{ vars.KIOTVIET_BASE_URL }}
           KIOTVIET_USERNAME: ${{ secrets.KIOTVIET_USERNAME }}
           KIOTVIET_PASSWORD: ${{ secrets.KIOTVIET_PASSWORD }}
 
@@ -94,8 +95,8 @@ jobs:
           ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD: ${{ vars.ORDERS_DELETE_DOWNLOADED_AFTER_UPLOAD || 'true' }}
 
           # Google Sheets
-          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
-          GOOGLE_SHEET_TAB_NAME: ${{ secrets.GOOGLE_SHEET_TAB_NAME }}
+          GOOGLE_SHEET_ID: ${{ vars.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEET_TAB_NAME: ${{ vars.GOOGLE_SHEET_TAB_NAME }}
           GOOGLE_SERVICE_ACCOUNT_KEY_FILE: .secrets/kiotviet-service-account.json
 
         run: npm run sync -- orders

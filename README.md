@@ -84,12 +84,8 @@ Optional: set required reviewers for `prod`.
 ### 2) Add Environment Secrets
 Add these secrets to BOTH environments (with environment-specific values if needed):
 
-- `KIOTVIET_BASE_URL` (example: `https://hatuanduc.kiotviet.vn`)
 - `KIOTVIET_USERNAME`
 - `KIOTVIET_PASSWORD`
-
-- `GOOGLE_SHEET_ID`
-- `GOOGLE_SHEET_TAB_NAME`
 
 - `GOOGLE_SERVICE_ACCOUNT_KEY_JSON`
   - Value: the full JSON content of your Google Service Account key.
@@ -97,6 +93,10 @@ Add these secrets to BOTH environments (with environment-specific values if need
 
 ### 3) Add Environment Variables (optional)
 You can configure these as Environment Variables (Settings → Environments → Variables):
+
+- `KIOTVIET_BASE_URL` (example: `https://hatuanduc.kiotviet.vn`)
+- `GOOGLE_SHEET_ID`
+- `GOOGLE_SHEET_TAB_NAME`
 
 - `ORDERS_URL`
 - `ORDERS_TIME_PRESET` (default: `Hôm nay`)
