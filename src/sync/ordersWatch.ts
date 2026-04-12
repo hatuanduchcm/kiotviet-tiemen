@@ -30,6 +30,11 @@ import {
   selectTimePreset
 } from '../orders/ordersPage.js';
 
+// Import các rule sử dụng ES module cho đồng bộ
+import { filterColumnsKiotViet } from '../rules/filter-columns-kiotviet.js';
+import { splitBoSuitToJacketPants } from '../rules/split-bosuit-to-jacket-pants.js';
+import { mergeCanvasToJacketManto } from '../rules/merge-canvas-to-jacket-manto.js';
+
 /**
  * Watch the Orders page and export detail file when new orders appear.
  *
@@ -498,6 +503,11 @@ export async function runOrdersWatch() {
         }
 
         const table = await parseFirstSheetAsTable(outPath);
+        // Áp dụng các rule xử lý đơn hàng tuần tự
+        let processedRows = table.rows;
+        processedRows = splitBoSuitToJacketPants(processedRows);
+        processedRows = mergeCanvasToJacketManto(processedRows);
+        processedRows = filterColumnsKiotViet(processedRows);
         const payload = {
           meta: {
             exportedAtIso: isoVietnam(new Date()),
@@ -505,10 +515,10 @@ export async function runOrdersWatch() {
             timePreset,
             orderCodes: selectedOrderCodes,
             downloadedPath: outPath,
-            rows: table.rows.length
+            rows: processedRows.length
           },
           headers: table.headers,
-          rows: table.rows
+          rows: processedRows
         };
 
           // Verify export contains at least 1 row per selected order code.
@@ -564,7 +574,7 @@ export async function runOrdersWatch() {
               tabName: googleTabName,
               serviceAccountKeyFile: googleKeyFile,
               headers: table.headers,
-              rows: table.rows
+              rows: processedRows
             });
             log('google:upload:ok', { appendedRows: res.appended, orderCodes: selectedOrderCodes });
 
