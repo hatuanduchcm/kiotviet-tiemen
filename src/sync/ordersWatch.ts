@@ -402,12 +402,12 @@ export async function runOrdersWatch() {
 
           const downloadEventPromise = page
             .waitForEvent('download', { timeout: exportTimeoutMs })
-            .then((d) => ({ kind: 'download' as const, d }))
-            .catch((e) => ({ kind: 'download-timeout' as const, error: String(e) }));
+            .then((d: any) => ({ kind: 'download' as const, d }))
+            .catch((e: any) => ({ kind: 'download-timeout' as const, error: String(e) }));
 
           const xlsxResponsePromise = page
             .waitForResponse(
-              (resp) => {
+                (resp: any) => {
                 try {
                   const h = resp.headers();
                   const ct = (h['content-type'] ?? '').toLowerCase();
@@ -426,8 +426,8 @@ export async function runOrdersWatch() {
               },
               { timeout: exportTimeoutMs }
             )
-            .then((resp) => ({ kind: 'xlsx-response' as const, resp }))
-            .catch((e) => ({ kind: 'xlsx-timeout' as const, error: String(e) }));
+            .then((resp: any) => ({ kind: 'xlsx-response' as const, resp }))
+            .catch((e: any) => ({ kind: 'xlsx-timeout' as const, error: String(e) }));
 
           await withRetries(() => exportSelectedOrdersDetail(page), {
             retries: 2,
