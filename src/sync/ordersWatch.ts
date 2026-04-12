@@ -511,7 +511,7 @@ export async function runOrdersWatch() {
         const payload = {
           meta: {
             exportedAtIso: isoVietnam(new Date()),
-            ordersUrl,reload
+            ordersUrl,
             timePreset,
             orderCodes: selectedOrderCodes,
             downloadedPath: outPath,
