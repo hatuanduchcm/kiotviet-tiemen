@@ -11,7 +11,7 @@ const CATEGORY_TEMPLATE: Array<{
   prefixes?: string[];
   nameKeywords?: string[];
 }> = [
-  { key: 'SUIT', prefixes: ['BS', 'SU'], nameKeywords: ['BỘ SUIT', 'SUIT'] },
+  { key: 'SUIT', prefixes: ['BS'], nameKeywords: ['BỘ SUIT', 'SUIT'] },
   { key: 'JACKET', prefixes: ['AJ'], nameKeywords: ['ÁO JACKET', 'JACKET'] },
   { key: 'MANTO', prefixes: ['MT'], nameKeywords: ['MĂNG TÔ', 'MANTO'] },
   { key: 'GILE', prefixes: ['AG'], nameKeywords: ['GILE', 'GILET', 'ÁO GILE'] },

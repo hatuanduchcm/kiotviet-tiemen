@@ -53,7 +53,7 @@ export function detectProductCategory(code: unknown, name: unknown):
   const matchesPrefix = (prefixes?: string[]) => prefixes?.some((p) => c.startsWith((p || '').toUpperCase()));
   const matchesName = (keywords?: string[]) => keywords?.some((k) => n.includes((k || '').toUpperCase()));
 
-  if (matchesPrefix(['BS', 'SU']) || matchesName(['BỘ SUIT', 'SUIT'])) return 'SUIT';
+  if (matchesPrefix(['BS']) || matchesName(['BỘ SUIT', 'SUIT'])) return 'SUIT';
   if (matchesPrefix(['AJ']) || matchesName(['ÁO JACKET', 'JACKET'])) return 'JACKET';
   if (matchesPrefix(['MT']) || matchesName(['MĂNG TÔ', 'MANTO'])) return 'MANTO';
   if (matchesPrefix(['AG']) || matchesName(['GILE', 'GILET', 'ÁO GILE'])) return 'GILE';

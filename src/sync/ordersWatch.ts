@@ -37,7 +37,6 @@ import { mergeCanvasToJacketManto } from '../rules/merge-canvas-to-jacket-manto.
 import { explodeProductsByQuantity } from '../rules/explode-products-by-quantity.js';
 import { applyCanvasTierRules } from '../rules/canvas-tier-rules.js';
 import { applyN11Rule } from '../rules/n11-rule.js';
-import { ensureColumns } from '../rules/ensure-columns.js';
 import { recomputePrices } from '../rules/recompute-prices.js';
 
 /**
@@ -513,8 +512,7 @@ export async function runOrdersWatch() {
   // User-requested processing order:
   // 1) Filter early to drop irrelevant columns
   processedRows = filterColumnsKiotViet(processedRows);
-  // 2) Add/ensure optional columns (STT, N11, Ghi chú Canvas)
-  processedRows = ensureColumns(processedRows, ['N11', 'Ghi chú Canvas', 'STT']);
+  // 2) (no-op) filtered rows already contain optional columns listed in COLUMNS_TO_KEEP; ensureColumns removed
   // 3) Apply N11 rule (note: this will use the Đơn giá present at this point — pre-merge per user's order)
   processedRows = applyN11Rule(processedRows);
   // 4) Explode multi-quantity rows into single-quantity rows (user requested explode before split)
@@ -525,9 +523,7 @@ export async function runOrdersWatch() {
   processedRows = mergeCanvasToJacketManto(processedRows);
   // 7) Apply canvas-tier heuristics (TB70, mid-tier Half Canvas) — preserves merged notes
   processedRows = applyCanvasTierRules(processedRows);
-  // 8) Populate STT (index) sequentially
-  processedRows = processedRows.map((r, i) => ({ ...(r as any), STT: String(i + 1) }));
-  // 9) Final filter to ensure columns are in canonical upload order
+  // 8) Final filter to ensure columns are in canonical upload order
   // Sanity: recompute per-row prices deterministically before final filter to avoid inconsistent Giá bán/Thành tiền
   processedRows = recomputePrices(processedRows);
   processedRows = filterColumnsKiotViet(processedRows);
