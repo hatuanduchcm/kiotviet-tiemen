@@ -1,32 +1,44 @@
-import { parseNumber, hasPrefix, nameIncludes } from './common.js';
+import { parseNumber, detectProductCategory } from './common.js';
 import N11_THRESHOLDS from './n11-thresholds.js';
 
 /**
- * Apply N11 flag to rows.
- * - For each row, detect product category heuristically from `Mã hàng` and `Tên hàng`.
- * - If `Đơn giá` >= configured threshold for that category, set column `N11` = 'N11'.
+ * Category detection template used by N11 rule.
+ * Each entry contains a category key that maps to N11_THRESHOLDS, a set of code prefixes
+ * and a set of name keywords. The detection is performed in order; the first match wins.
+ */
+const CATEGORY_TEMPLATE: Array<{
+  key: keyof typeof N11_THRESHOLDS;
+  prefixes?: string[];
+  nameKeywords?: string[];
+}> = [
+  { key: 'SUIT', prefixes: ['BS', 'SU'], nameKeywords: ['BỘ SUIT', 'SUIT'] },
+  { key: 'JACKET', prefixes: ['AJ'], nameKeywords: ['ÁO JACKET', 'JACKET'] },
+  { key: 'MANTO', prefixes: ['MT'], nameKeywords: ['MĂNG TÔ', 'MANTO'] },
+  { key: 'GILE', prefixes: ['AG'], nameKeywords: ['GILE', 'GILET', 'ÁO GILE'] },
+  { key: 'QUAN', prefixes: ['QT'], nameKeywords: ['QUẦN', 'PANTS'] },
+  { key: 'SOMI', prefixes: ['SM'], nameKeywords: ['SƠ MI', 'SOMI'] }
+];
+
+function strIncludesAny(src: string, patterns?: string[]) {
+  if (!patterns || patterns.length === 0) return false;
+  const s = String(src || '').toUpperCase();
+  return patterns.some((p) => s.includes(String(p || '').toUpperCase()));
+}
+
+/**
+ * Apply N11 flag to rows using a small template for detection.
  */
 export function applyN11Rule(rows: any[]): any[] {
   for (const r of rows) {
-    const code = String(r?.['Mã hàng'] ?? '');
+    const code = String(r?.['Mã hàng'] ?? '').toUpperCase();
     const name = String(r?.['Tên hàng'] ?? '');
     const unit = parseNumber(r?.['Đơn giá']);
 
     let threshold: number | null = null;
 
-    // Heuristics to find category -> threshold
-    if (hasPrefix(code, 'AJ') || nameIncludes(name, 'ÁO JACKET') || nameIncludes(name, 'JACKET')) {
-      threshold = N11_THRESHOLDS.JACKET;
-    } else if (hasPrefix(code, 'MT') || nameIncludes(name, 'MĂNG TÔ') || nameIncludes(name, 'MANTO')) {
-      threshold = N11_THRESHOLDS.MANTO;
-    } else if (nameIncludes(name, 'BỘ SUIT') || nameIncludes(name, 'SUIT') || hasPrefix(code, 'SU')) {
-      threshold = N11_THRESHOLDS.SUIT;
-    } else if (nameIncludes(name, 'GILE')) {
-      threshold = N11_THRESHOLDS.GILE;
-    } else if (nameIncludes(name, 'QUẦN') || nameIncludes(name, 'PANTS') || hasPrefix(code, 'QT')) {
-      threshold = N11_THRESHOLDS.QUAN;
-    } else if (nameIncludes(name, 'SƠ MI') || nameIncludes(name, 'SOMI') || hasPrefix(code, 'SM')) {
-      threshold = N11_THRESHOLDS.SOMI;
+    const cat = detectProductCategory(code, name);
+    if (cat) {
+      threshold = N11_THRESHOLDS[cat as keyof typeof N11_THRESHOLDS];
     }
 
     if (threshold != null && unit >= threshold) {

@@ -1,4 +1,4 @@
-import { hasPrefix, nameIncludes, parseNumber } from './common.js';
+import { hasPrefix, nameIncludes, parseNumber, detectProductCategory } from './common.js';
 
 export function mergeCanvasToJacketManto(rows: any[]): any[] {
   const grouped: Record<string, any[]> = {};
@@ -9,9 +9,13 @@ export function mergeCanvasToJacketManto(rows: any[]): any[] {
   }
   const result: any[] = [];
   for (const groupRows of Object.values(grouped)) {
-    const canvasRows = groupRows.filter(r => (hasPrefix(r['Mã hàng'], 'CTA09') || hasPrefix(r['Mã hàng'], 'CTA10')) && (r['Tên hàng'] === 'Half Canvas' || r['Tên hàng'] === 'Full Canvas'));
-    const jackets = groupRows.filter(r => hasPrefix(r['Mã hàng'], 'AJ') && nameIncludes(r['Tên hàng'], 'ÁO JACKET'));
-    const mantos = groupRows.filter(r => hasPrefix(r['Mã hàng'], 'MT') && nameIncludes(r['Tên hàng'], 'MĂNG TÔ'));
+    const canvasRows = groupRows.filter(
+      (r) =>
+        (hasPrefix(r['Mã hàng'], 'CTA09') || hasPrefix(r['Mã hàng'], 'CTA10')) &&
+        (r['Tên hàng'] === 'Half Canvas' || r['Tên hàng'] === 'Full Canvas')
+    );
+    const jackets = groupRows.filter((r) => detectProductCategory(r['Mã hàng'], r['Tên hàng']) === 'JACKET');
+    const mantos = groupRows.filter((r) => detectProductCategory(r['Mã hàng'], r['Tên hàng']) === 'MANTO');
     jackets.sort((a, b) => parseNumber(b['Đơn giá']) - parseNumber(a['Đơn giá']));
     mantos.sort((a, b) => parseNumber(b['Đơn giá']) - parseNumber(a['Đơn giá']));
     let canvasIdx = 0;

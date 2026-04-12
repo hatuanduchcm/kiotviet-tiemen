@@ -1,4 +1,4 @@
-import { hasPrefix, nameIncludes, parseNumber } from './common.js';
+import { hasPrefix, nameIncludes, parseNumber, detectProductCategory } from './common.js';
 
 /**
  * Apply canvas rules based on package/tier heuristics.
@@ -15,9 +15,10 @@ export function applyCanvasTierRules(rows: any[]): any[] {
 
   for (const row of rows) {
     const r = { ...row };
-    const code = String(r['Mã hàng'] ?? '').toUpperCase();
-    const name = String(r['Tên hàng'] ?? '');
-    const unitPrice = parseNumber(r['Đơn giá']);
+  const code = String(r['Mã hàng'] ?? '').toUpperCase();
+  const name = String(r['Tên hàng'] ?? '');
+  const unitPrice = parseNumber(r['Đơn giá']);
+  const category = detectProductCategory(code, name);
 
     let appliedRule: 'TB70' | 'MERGE' | 'MID' | null = null;
 
@@ -26,14 +27,19 @@ export function applyCanvasTierRules(rows: any[]): any[] {
     if (existingCanvas) appliedRule = 'MERGE';
 
     // 1) TB70 rule (highest). If name contains 'TB70', set Full Canvas and mark applied.
+    // NOTE: apply Full Canvas only to jackets (AJ). TB70 on pants (QT) should NOT set Full Canvas.
     if (name.toUpperCase().includes('TB70')) {
-      r['Ghi chú Canvas'] = 'Full Canvas';
-      appliedRule = 'TB70';
+      if (category === 'JACKET') {
+        r['Ghi chú Canvas'] = 'Full Canvas';
+        appliedRule = 'TB70';
+      } else {
+        // TB70 found but not a jacket -> do not set Full Canvas (keep any existing canvas note)
+      }
     } else {
       // 3) Mid-tier thresholds only apply if we don't already have a higher-priority rule
       // Check AJ (jacket) threshold
       if (!appliedRule || appliedRule === 'MERGE') {
-        if (hasPrefix(code, 'AJ') && unitPrice >= 17_000_000) {
+  if (category === 'JACKET' && unitPrice >= 17_000_000) {
           // Only set if not already set by MERGE; if MERGE exists, keep it (unless TB70 matched above)
           if (!existingCanvas) {
             r['Ghi chú Canvas'] = 'Half Canvas';
@@ -42,7 +48,7 @@ export function applyCanvasTierRules(rows: any[]): any[] {
         }
 
         // Check MT (măng tô) threshold
-        if (hasPrefix(code, 'MT') && unitPrice >= 22_100_000) {
+  if (category === 'MANTO' && unitPrice >= 22_100_000) {
           if (!existingCanvas) {
             r['Ghi chú Canvas'] = 'Half Canvas';
             appliedRule = 'MID';

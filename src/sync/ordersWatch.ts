@@ -38,6 +38,7 @@ import { explodeProductsByQuantity } from '../rules/explode-products-by-quantity
 import { applyCanvasTierRules } from '../rules/canvas-tier-rules.js';
 import { applyN11Rule } from '../rules/n11-rule.js';
 import { ensureColumns } from '../rules/ensure-columns.js';
+import { recomputePrices } from '../rules/recompute-prices.js';
 
 /**
  * Watch the Orders page and export detail file when new orders appear.
@@ -527,6 +528,8 @@ export async function runOrdersWatch() {
   // 8) Populate STT (index) sequentially
   processedRows = processedRows.map((r, i) => ({ ...(r as any), STT: String(i + 1) }));
   // 9) Final filter to ensure columns are in canonical upload order
+  // Sanity: recompute per-row prices deterministically before final filter to avoid inconsistent Giá bán/Thành tiền
+  processedRows = recomputePrices(processedRows);
   processedRows = filterColumnsKiotViet(processedRows);
         const payload = {
           meta: {
