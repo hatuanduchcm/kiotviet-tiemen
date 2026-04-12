@@ -6,7 +6,7 @@ import { hasPrefix, nameIncludes, parseNumber, detectProductCategory } from './c
  *  1) TB70 rule: product name contains 'TB70' -> Full Canvas
  *  2) Existing 'Ghi chú Canvas' coming from accessory merge is preserved unless TB70 applies
  *  3) Mid-tier thresholds: AJ with Đơn giá >= 17_000_000 or MT with Đơn giá >= 22_100_000 -> Half Canvas
- *  4) N11 flag: if product's group/index is 11..20 (detected by NHÓM column or code suffix -11..-20) -> set 'N11' = 'Yes'
+ *  4) (deprecated here) N11 is handled by the N11 rule; this file only sets canvas notes
  *
  * The rule modifies rows in-place and returns the new array.
  */
@@ -57,33 +57,7 @@ export function applyCanvasTierRules(rows: any[]): any[] {
       }
     }
 
-    // 4) N11 flag: determine group index from 'NHÓM' column or trailing -NN in code
-    let groupIndex: number | null = null;
-    const grp = r['NHÓM'] ?? r['Nhóm'] ?? r['nhóm'];
-    if (grp != null && String(grp).trim() !== '') {
-      const n = parseInt(String(grp).replace(/[^0-9]/g, ''), 10);
-      if (!Number.isNaN(n)) groupIndex = n;
-    }
-
-    if (groupIndex === null) {
-      // try to extract trailing -NN or trailing number from code
-      const m = code.match(/-(\d{1,3})$/);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (!Number.isNaN(n)) groupIndex = n;
-      } else {
-        // try trailing digits in code
-        const m2 = code.match(/(\d{1,3})$/);
-        if (m2) {
-          const n = parseInt(m2[1], 10);
-          if (!Number.isNaN(n)) groupIndex = n;
-        }
-      }
-    }
-
-    if (groupIndex !== null && groupIndex >= 11 && groupIndex <= 20) {
-      r['N11'] = 'Yes';
-    }
+    // N11 is handled separately by the N11 rule; this step only sets canvas notes.
 
     res.push(r);
   }
