@@ -31,9 +31,13 @@ import {
 } from '../orders/ordersPage.js';
 
 // Import các rule sử dụng ES module cho đồng bộ
-import { filterColumnsKiotViet } from '../rules/filter-columns-kiotviet.js';
+import { filterColumnsKiotViet, COLUMNS_TO_KEEP } from '../rules/filter-columns-kiotviet.js';
 import { splitBoSuitToJacketPants } from '../rules/split-bosuit-to-jacket-pants.js';
 import { mergeCanvasToJacketManto } from '../rules/merge-canvas-to-jacket-manto.js';
+import { explodeProductsByQuantity } from '../rules/explode-products-by-quantity.js';
+import { applyCanvasTierRules } from '../rules/canvas-tier-rules.js';
+import { applyN11Rule } from '../rules/n11-rule.js';
+import { ensureColumns } from '../rules/ensure-columns.js';
 
 /**
  * Watch the Orders page and export detail file when new orders appear.
@@ -503,11 +507,27 @@ export async function runOrdersWatch() {
         }
 
         const table = await parseFirstSheetAsTable(outPath);
-        // Áp dụng các rule xử lý đơn hàng tuần tự
-        let processedRows = table.rows;
-        processedRows = splitBoSuitToJacketPants(processedRows);
-        processedRows = mergeCanvasToJacketManto(processedRows);
-        processedRows = filterColumnsKiotViet(processedRows);
+  // Áp dụng các rule xử lý đơn hàng tuần tự
+  let processedRows = table.rows;
+  // User-requested processing order:
+  // 1) Filter early to drop irrelevant columns
+  processedRows = filterColumnsKiotViet(processedRows);
+  // 2) Add/ensure optional columns (STT, N11, Ghi chú Canvas)
+  processedRows = ensureColumns(processedRows, ['N11', 'Ghi chú Canvas', 'STT']);
+  // 3) Apply N11 rule (note: this will use the Đơn giá present at this point — pre-merge per user's order)
+  processedRows = applyN11Rule(processedRows);
+  // 4) Explode multi-quantity rows into single-quantity rows (user requested explode before split)
+  processedRows = explodeProductsByQuantity(processedRows);
+  // 5) Split any BỘ SUIT into JACKET + QUẦN
+  processedRows = splitBoSuitToJacketPants(processedRows);
+  // 6) Merge canvas accessory rows into JACKET/MĂNG TÔ and recalc prices
+  processedRows = mergeCanvasToJacketManto(processedRows);
+  // 7) Apply canvas-tier heuristics (TB70, mid-tier Half Canvas) — preserves merged notes
+  processedRows = applyCanvasTierRules(processedRows);
+  // 8) Populate STT (index) sequentially
+  processedRows = processedRows.map((r, i) => ({ ...(r as any), STT: String(i + 1) }));
+  // 9) Final filter to ensure columns are in canonical upload order
+  processedRows = filterColumnsKiotViet(processedRows);
         const payload = {
           meta: {
             exportedAtIso: isoVietnam(new Date()),
@@ -517,7 +537,7 @@ export async function runOrdersWatch() {
             downloadedPath: outPath,
             rows: processedRows.length
           },
-          headers: table.headers,
+          headers: COLUMNS_TO_KEEP,
           rows: processedRows
         };
 
@@ -573,7 +593,7 @@ export async function runOrdersWatch() {
               sheetId: googleSheetId,
               tabName: googleTabName,
               serviceAccountKeyFile: googleKeyFile,
-              headers: table.headers,
+              headers: COLUMNS_TO_KEEP,
               rows: processedRows
             });
             log('google:upload:ok', { appendedRows: res.appended, orderCodes: selectedOrderCodes });

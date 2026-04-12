@@ -15,11 +15,62 @@ export function mergeCanvasToJacketManto(rows: any[]): any[] {
     jackets.sort((a, b) => parseNumber(b['Đơn giá']) - parseNumber(a['Đơn giá']));
     mantos.sort((a, b) => parseNumber(b['Đơn giá']) - parseNumber(a['Đơn giá']));
     let canvasIdx = 0;
+    // Merge into jackets first, then mantos. For each merge, recalculate prices.
     for (let i = 0; i < jackets.length && canvasIdx < canvasRows.length; i++, canvasIdx++) {
-      jackets[i]['Ghi chú Canvas'] = canvasRows[canvasIdx]['Tên hàng'];
+      const target = jackets[i];
+      const canvas = canvasRows[canvasIdx];
+      // set canvas note (if already present, keep it or append)
+      target['Ghi chú Canvas'] = canvas['Tên hàng'];
+
+      // Recalculate prices: Đơn giá_mới = Đơn giá_target + Đơn giá_canvas
+      const baseUnit = parseNumber(target['Đơn giá']);
+      const canvasUnit = parseNumber(canvas['Đơn giá']);
+      const newUnit = baseUnit + canvasUnit;
+
+      // Prefer percent discount if present
+      const discountPct = parseNumber(target['Giảm giá %']);
+      let discountValue = 0;
+      if (discountPct && discountPct > 0) {
+        discountValue = Math.round(newUnit * (discountPct / 100));
+      } else {
+        // fallback to absolute discount if provided
+        discountValue = parseNumber(target['Giảm giá']);
+      }
+
+      const newPrice = newUnit - discountValue;
+      const qty = Number(parseInt(String(target['Số lượng'] ?? '1'), 10)) || 1;
+      const lineTotal = newPrice * qty;
+
+      target['Đơn giá'] = newUnit;
+      target['Giảm giá'] = discountValue;
+      target['Giá bán'] = newPrice;
+      target['Thành tiền'] = lineTotal;
     }
     for (let i = 0; i < mantos.length && canvasIdx < canvasRows.length; i++, canvasIdx++) {
-      mantos[i]['Ghi chú Canvas'] = canvasRows[canvasIdx]['Tên hàng'];
+      const target = mantos[i];
+      const canvas = canvasRows[canvasIdx];
+      target['Ghi chú Canvas'] = canvas['Tên hàng'];
+
+      const baseUnit = parseNumber(target['Đơn giá']);
+      const canvasUnit = parseNumber(canvas['Đơn giá']);
+      const newUnit = baseUnit + canvasUnit;
+
+      const discountPct = parseNumber(target['Giảm giá %']);
+      let discountValue = 0;
+      if (discountPct && discountPct > 0) {
+        discountValue = Math.round(newUnit * (discountPct / 100));
+      } else {
+        discountValue = parseNumber(target['Giảm giá']);
+      }
+
+      const newPrice = newUnit - discountValue;
+      const qty = Number(parseInt(String(target['Số lượng'] ?? '1'), 10)) || 1;
+      const lineTotal = newPrice * qty;
+
+      target['Đơn giá'] = newUnit;
+      target['Giảm giá'] = discountValue;
+      target['Giá bán'] = newPrice;
+      target['Thành tiền'] = lineTotal;
     }
     for (const r of groupRows) {
       if (!canvasRows.includes(r)) result.push(r);

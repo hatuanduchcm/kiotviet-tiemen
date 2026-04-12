@@ -15,6 +15,23 @@
   - Thêm cột "Ghi chú Canvas" vào sản phẩm đó, giá trị là tên canvas ("Half Canvas" hoặc "Full Canvas").
   - Xóa dòng sản phẩm canvas khỏi đơn hàng (nếu cần).
 
+## Tính toán lại giá sau khi merge
+Khi merge giá trị canvas vào sản phẩm chính, cần cập nhật các trường giá để phản ánh giá cộng lại và áp dụng giảm giá hiện có. Quy tắc tính như sau (áp dụng trước khi tính `Thành tiền`):
+
+- Nếu sản phẩm canvas có giá riêng, cộng tất cả giá canvas vào `Đơn giá` sản phẩm chính:
+  - `Đơn giá_mới = Đơn giá_sản_phẩm_chính + Σ Đơn giá_canvas`
+  - Nếu không có giá canvas (hoặc canvas miễn phí), `Đơn giá_mới = Đơn giá_sản_phẩm_chính`.
+- Áp dụng **Giảm giá** theo phần trăm (nếu trường `Giảm giá` đang lưu là %):
+  - `Giá giảm (VND) = Đơn giá_mới * (Giảm giá% / 100)`
+  - `Giá bán = Đơn giá_mới - Giá giảm`  (tương đương `Giá bán = Đơn giá_mới * (1 - Giảm giá% / 100)`)
+- `Thành tiền = Giá bán * Số lượng`.
+
+Ghi chú quan trọng:
+- Nếu `Giảm giá` trong dữ liệu là một giá trị tuyệt đối (VND) thay vì %, giữ nguyên cách áp dụng như hiện tại — nhưng khuyến nghị chuẩn hoá `Giảm giá` thành phần trăm để xử lý hợp nhất giá dễ dàng.
+- Nếu merge nhiều canvas vào cùng sản phẩm, cộng tất cả `Đơn giá_canvas` trước khi tính `Giảm giá`.
+- Làm tròn các phép tính theo quy ước của hệ thống (ví dụ: làm tròn tới đồng gần nhất). Nếu cần phân phối phần dư khi tách `Thành tiền` cho nhiều dòng, dùng quy tắc phân bố đều hoặc ưu tiên dòng giá cao hơn.
+- Cột "Ghi chú Canvas" không thay đổi giá trị giảm hoặc cách áp dụng giảm; nó chỉ ghi nhận loại canvas đã gộp.
+
 ### Ví dụ
 | Mã SP  | Tên SP                                   |
 |--------|------------------------------------------|
