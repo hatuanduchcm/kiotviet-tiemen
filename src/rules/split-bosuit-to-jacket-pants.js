@@ -1,7 +1,7 @@
 // Tách BỘ SUIT thành ÁO JACKET và QUẦN TÂY, chia giá trị 80/20
-const { hasPrefix } = require('./common');
+import { hasPrefix } from './common.js';
 
-function splitBoSuitToJacketPants(rows) {
+export function splitBoSuitToJacketPants(rows) {
   const result = [];
   for (const row of rows) {
     if (hasPrefix(row['Mã hàng'], 'BS') && typeof row['Tên hàng'] === 'string' && row['Tên hàng'].toUpperCase().startsWith('BỘ SUIT')) {
@@ -28,4 +28,4 @@ function splitBoSuitToJacketPants(rows) {
   return result;
 }
 
-module.exports = { splitBoSuitToJacketPants };
+

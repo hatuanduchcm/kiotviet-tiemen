@@ -1,7 +1,7 @@
 // Merge Canvas vào ÁO JACKET hoặc MĂNG TÔ
-const { hasPrefix, nameIncludes, parseNumber } = require('./common');
+import { hasPrefix, nameIncludes, parseNumber } from './common.js';
 
-function mergeCanvasToJacketManto(rows) {
+export function mergeCanvasToJacketManto(rows) {
   // Gom theo mã đặt hàng
   const grouped = {};
   for (const row of rows) {
@@ -36,4 +36,4 @@ function mergeCanvasToJacketManto(rows) {
   return result;
 }
 
-module.exports = { mergeCanvasToJacketManto };
+

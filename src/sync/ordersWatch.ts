@@ -30,7 +30,7 @@ import {
   selectTimePreset
 } from '../orders/ordersPage.js';
 
-// Thêm import các rule xử lý đơn hàng
+// Import các rule sử dụng ES module cho đồng bộ
 import { filterColumnsKiotViet } from '../rules/filter-columns-kiotviet.js';
 import { splitBoSuitToJacketPants } from '../rules/split-bosuit-to-jacket-pants.js';
 import { mergeCanvasToJacketManto } from '../rules/merge-canvas-to-jacket-manto.js';
