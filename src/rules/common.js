@@ -30,9 +30,3 @@ export function parseNumber(val) {
   return parseFloat(val.toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
 }
 
-module.exports = {
-  normalizeProductName,
-  hasPrefix,
-  nameIncludes,
-  parseNumber
-};
