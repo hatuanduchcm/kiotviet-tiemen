@@ -118,7 +118,10 @@ export async function appendTableToSheet(opts: {
   }
 
   const headersIndex: Record<string, number> = {};
-  for (let i = 0; i < sheetHeaders.length; i++) headersIndex[sheetHeaders[i] ?? ''] = i;
+  for (let i = 0; i < sheetHeaders.length; i++) {
+    const h = sheetHeaders[i] ?? '';
+    if (h && !(h in headersIndex)) headersIndex[h] = i;
+  }
 
   const toAppend: Array<Array<Cell>> = [];
   for (const r of opts.rows) {
@@ -138,7 +141,7 @@ export async function appendTableToSheet(opts: {
     spreadsheetId: opts.sheetId,
     range: `${opts.tabName}!A:ZZ`,
     valueInputOption: 'RAW',
-    insertDataOption: 'OVERWRITE',
+    insertDataOption: 'INSERT_ROWS',
     requestBody: { values: toAppend }
   });
 
