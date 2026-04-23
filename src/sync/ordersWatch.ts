@@ -581,8 +581,12 @@ export async function runOrdersWatch() {
           if (!googleSheetId || !googleKeyFile) {
             throw new Error('Google Sheets upload is not configured. Set GOOGLE_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_KEY_FILE.');
           }
-          // Reverse so oldest orders are appended first → sheet remains chronologically ascending.
-          const processedRowsAsc = [...processedRows].reverse();
+          // Sort by "Thời gian tạo" ascending so oldest orders are appended first.
+          const processedRowsAsc = [...processedRows].sort((a, b) => {
+            const ta = parseVietnamUiDateTimeToMs(String((a as any)['Thời gian tạo'] ?? '')) ?? 0;
+            const tb = parseVietnamUiDateTimeToMs(String((b as any)['Thời gian tạo'] ?? '')) ?? 0;
+            return ta - tb;
+          });
 
           // Upload filtered data to raw tab if configured.
           if (googleRawTabName) {
