@@ -138,7 +138,7 @@ export async function appendTableToSheet(opts: {
     spreadsheetId: opts.sheetId,
     range: `${opts.tabName}!A:ZZ`,
     valueInputOption: 'RAW',
-    insertDataOption: 'INSERT_ROWS',
+    insertDataOption: 'OVERWRITE',
     requestBody: { values: toAppend }
   });
 

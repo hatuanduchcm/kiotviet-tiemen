@@ -581,19 +581,22 @@ export async function runOrdersWatch() {
           if (!googleSheetId || !googleKeyFile) {
             throw new Error('Google Sheets upload is not configured. Set GOOGLE_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_KEY_FILE.');
           }
+          // Reverse so oldest orders are appended first → sheet remains chronologically ascending.
+          const processedRowsAsc = [...processedRows].reverse();
+
           // Upload filtered data to raw tab if configured.
           if (googleRawTabName) {
             log('google:upload:raw:start', {
               sheetId: googleSheetId,
               tabName: googleRawTabName,
-              rows: processedRows.length
+              rows: processedRowsAsc.length
             });
             const rawRes = await appendTableToSheet({
               sheetId: googleSheetId,
               tabName: googleRawTabName,
               serviceAccountKeyFile: googleKeyFile,
               headers: COLUMNS_TO_KEEP,
-              rows: processedRows
+              rows: processedRowsAsc
             });
             log('google:upload:raw:ok', { appendedRows: rawRes.appended });
           }
@@ -610,7 +613,7 @@ export async function runOrdersWatch() {
               tabName: googleTabName,
               serviceAccountKeyFile: googleKeyFile,
               headers: COLUMNS_TO_KEEP,
-              rows: processedRows
+              rows: processedRowsAsc
             });
             log('google:upload:ok', { appendedRows: res.appended, orderCodes: selectedOrderCodes });
 
