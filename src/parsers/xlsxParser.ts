@@ -14,17 +14,17 @@ export async function parseFirstSheetAsTable(filePath: string): Promise<ParsedTa
 
   const sheet = wb.Sheets[sheetName];
 
-  // Parse as raw arrays to handle duplicate column names correctly.
-  const raw = xlsx.utils.sheet_to_json<Array<unknown>>(sheet, {
+  // Parse header row with raw: false to get formatted text (headers are always strings).
+  const rawHeaders = xlsx.utils.sheet_to_json<Array<unknown>>(sheet, {
     header: 1,
     defval: null,
     raw: false,
     dateNF: 'dd/mm/yyyy hh:mm:ss'
   });
 
-  if (raw.length === 0) return { headers: [], rows: [] };
+  if (rawHeaders.length === 0) return { headers: [], rows: [] };
 
-  const headerRow = (raw[0] as Array<unknown>).map((h) => (h == null ? '' : String(h)));
+  const headerRow = (rawHeaders[0] as Array<unknown>).map((h) => (h == null ? '' : String(h)));
 
   // Build a mapping: header name → first column index (ignore duplicates after first).
   const firstIndexOf: Record<string, number> = {};
@@ -35,14 +35,54 @@ export async function parseFirstSheetAsTable(filePath: string): Promise<ParsedTa
 
   const headers = Object.keys(firstIndexOf);
 
-  const rows = (raw.slice(1) as Array<Array<unknown>>).map((rowArr) => {
+  // Parse data rows with raw: true so numeric cells come back as numbers (no comma formatting).
+  // Date cells (type 'd') are formatted explicitly below.
+  const rawData = xlsx.utils.sheet_to_json<Array<unknown>>(sheet, {
+    header: 1,
+    defval: null,
+    raw: true
+  });
+
+  const rows = (rawData.slice(1) as Array<Array<unknown>>).map((rowArr, rowOffset) => {
+    const sheetRowIdx = rowOffset + 1; // 0-based index in sheet (row 0 = header)
     const out: Record<string, string | number | boolean | null> = {};
     for (const h of headers) {
       const idx = firstIndexOf[h]!;
       const v = rowArr[idx];
-      if (v === null || v === undefined) out[h] = null;
-      else if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') out[h] = v;
-      else out[h] = String(v);
+      if (v === null || v === undefined) {
+        out[h] = null;
+      } else if (typeof v === 'number') {
+        // Check if this cell is a date by looking at its type in the sheet object.
+        const cellAddr = xlsx.utils.encode_cell({ r: sheetRowIdx, c: idx });
+        const cell = sheet[cellAddr];
+        if (cell && cell.t === 'd') {
+          const d: Date = cell.v instanceof Date ? cell.v : new Date(cell.v);
+          const pad = (n: number) => String(n).padStart(2, '0');
+          out[h] = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        } else {
+          // Plain number — store as number, no comma formatting.
+          out[h] = v;
+        }
+      } else if (typeof v === 'string' || typeof v === 'boolean') {
+        if (typeof v === 'string') {
+          // Only convert strings that look like thousand-separated integers (e.g. "18,700,000").
+          // Pattern: optional leading digits, then groups of exactly 3 digits separated by comma.
+          // This avoids stripping commas from real text values like "A, B".
+          const isThousandSeparatedInt = /^\d{1,3}(,\d{3})+$/.test(v.trim());
+          if (isThousandSeparatedInt) {
+            out[h] = Number(v.replace(/,/g, ''));
+          } else {
+            out[h] = v;
+          }
+        } else {
+          out[h] = v;
+        }
+      } else if (v instanceof Date) {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        out[h] = `${pad(v.getDate())}/${pad(v.getMonth() + 1)}/${v.getFullYear()} ${pad(v.getHours())}:${pad(v.getMinutes())}:${pad(v.getSeconds())}`;
+      } else {
+        out[h] = String(v);
+      }
     }
     return out;
   });
