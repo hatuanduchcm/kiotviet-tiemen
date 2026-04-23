@@ -52,13 +52,29 @@ export async function parseFirstSheetAsTable(filePath: string): Promise<ParsedTa
       if (v === null || v === undefined) {
         out[h] = null;
       } else if (typeof v === 'number') {
-        // Check if this cell is a date by looking at its type in the sheet object.
+        // Check if this cell is a date by looking at its type/numFmt in the sheet object.
         const cellAddr = xlsx.utils.encode_cell({ r: sheetRowIdx, c: idx });
         const cell = sheet[cellAddr];
-        if (cell && cell.t === 'd') {
-          const d: Date = cell.v instanceof Date ? cell.v : new Date(cell.v);
-          const pad = (n: number) => String(n).padStart(2, '0');
-          out[h] = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        const isDateCell =
+          cell &&
+          (cell.t === 'd' ||
+            (cell.t === 'n' &&
+              typeof cell.z === 'string' &&
+              /[yYmMdDhHsS]/.test(cell.z) &&
+              !/^0/.test(cell.z)));
+        if (isDateCell) {
+          // Convert serial to Date using xlsx utility (handles 1900/1904 date systems).
+          const dateVal = xlsx.SSF ? xlsx.SSF.parse_date_code(v) : null;
+          if (dateVal) {
+            const pad = (n: number) => String(n).padStart(2, '0');
+            out[h] = `${pad(dateVal.d)}/${pad(dateVal.m)}/${dateVal.y} ${pad(dateVal.H)}:${pad(dateVal.M)}:${pad(dateVal.S)}`;
+          } else if (cell.t === 'd') {
+            const d: Date = cell.v instanceof Date ? cell.v : new Date(cell.v);
+            const pad = (n: number) => String(n).padStart(2, '0');
+            out[h] = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+          } else {
+            out[h] = v;
+          }
         } else {
           // Plain number — store as number, no comma formatting.
           out[h] = v;
