@@ -82,26 +82,41 @@ export async function appendTableToSheet(opts: {
   const sheets = google.sheets({ version: 'v4', auth });
   await ensureSheetTabExists(sheets, opts.sheetId, opts.tabName);
 
-  // Scan first 5 rows to find a row matching opts.headers.
-  const scanResp = await sheets.spreadsheets.values.get({
+  // Use spreadsheets.get with includeGridData to get header row values AND column visibility.
+  // values.get alone truncates trailing empty cells and has no visibility info.
+  const metaResp = await sheets.spreadsheets.get({
     spreadsheetId: opts.sheetId,
-    range: `${opts.tabName}!A1:ZZ5`
+    ranges: [`${opts.tabName}!1:5`],
+    includeGridData: true,
+    fields: 'sheets(data(columnMetadata(hiddenByUser),rowData(values(formattedValue))))'
   });
-  const scanRows = (scanResp.data.values ?? []) as Array<Array<unknown>>;
 
+  type ColMeta = { hiddenByUser?: boolean };
+  type GridCell = { formattedValue?: string };
+  type GridRow = { values?: GridCell[] };
+
+  const sheetGridData = metaResp.data.sheets?.[0]?.data?.[0];
+  const colMeta: ColMeta[] = ((sheetGridData?.columnMetadata ?? []) as ColMeta[]).slice();
+  const gridRows: GridRow[] = (sheetGridData?.rowData ?? []) as GridRow[];
+
+  const isColHidden = (colIdx: number): boolean => colMeta[colIdx]?.hiddenByUser === true;
+
+  // Find the header row among first 5 rows.
   let sheetHeaders: string[] = [];
   let headerFound = false;
-  for (const scanRow of scanRows) {
-    const candidates = scanRow.map((x) => String(x ?? '').trim());
-    if (opts.headers.length > 0 && opts.headers.every((h) => candidates.includes(h))) {
-      sheetHeaders = candidates;
+  for (const gridRow of gridRows) {
+    const rowVals = (gridRow.values ?? []).map((v) => String(v?.formattedValue ?? '').trim());
+    if (opts.headers.length > 0 && opts.headers.every((h) => rowVals.includes(h))) {
+      sheetHeaders = rowVals;
       headerFound = true;
       break;
     }
   }
 
   if (!headerFound) {
-    const hasData = scanRows.some((r) => r.some((c) => String(c ?? '').trim() !== ''));
+    const hasData = gridRows.some((row) =>
+      (row.values ?? []).some((v) => String(v?.formattedValue ?? '').trim() !== '')
+    );
     if (hasData) {
       throw new Error(
         `appendTableToSheet: sheet "${opts.tabName}" has existing data but expected header columns (${opts.headers.slice(0, 3).join(', ')}...) were not found in the first 5 rows. Refusing to append to avoid data corruption.`
@@ -115,12 +130,21 @@ export async function appendTableToSheet(opts: {
       requestBody: { values: [opts.headers] }
     });
     sheetHeaders = opts.headers;
+    // Columns just written are all visible — pad colMeta if needed.
+    while (colMeta.length < sheetHeaders.length) colMeta.push({});
   }
 
+  // Build headersIndex: two-pass — prefer visible columns; fall back to hidden if no visible found.
   const headersIndex: Record<string, number> = {};
+  // Pass 1: visible columns only.
   for (let i = 0; i < sheetHeaders.length; i++) {
     const h = sheetHeaders[i] ?? '';
-    if (h && !(h in headersIndex)) headersIndex[h] = i;
+    if (h && !isColHidden(i) && !(h in headersIndex)) headersIndex[h] = i;
+  }
+  // Pass 2: hidden columns as fallback (only if name not already mapped by a visible column).
+  for (let i = 0; i < sheetHeaders.length; i++) {
+    const h = sheetHeaders[i] ?? '';
+    if (h && isColHidden(i) && !(h in headersIndex)) headersIndex[h] = i;
   }
 
   const toAppend: Array<Array<Cell>> = [];
@@ -129,8 +153,7 @@ export async function appendTableToSheet(opts: {
     for (const [h, v] of Object.entries(r)) {
       const idx = headersIndex[h];
       if (idx === undefined) continue;
-      if (v === null || v === undefined) rowOut[idx] = '';
-      else rowOut[idx] = v as Cell;
+      rowOut[idx] = v === null || v === undefined ? '' : (v as Cell);
     }
     toAppend.push(rowOut);
   }
