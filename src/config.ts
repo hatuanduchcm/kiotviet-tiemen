@@ -33,6 +33,7 @@ const EnvSchema = z.object({
   STOP_AFTER_LOGIN_MS: z.string().optional(),
   GOOGLE_SHEET_ID: z.string().optional(),
   GOOGLE_SHEET_TAB_NAME: z.string().optional(),
+  GOOGLE_SHEET_TAB_NAME_RAW: z.string().optional(),
   GOOGLE_SERVICE_ACCOUNT_KEY_FILE: z.string().optional(),
 
   // Cleanup
@@ -96,6 +97,7 @@ export type AppConfig = {
   google: {
     sheetId?: string;
     tabName?: string;
+    rawTabName?: string;
     serviceAccountKeyFile?: string;
   };
 };
@@ -132,6 +134,7 @@ export function loadConfig(): AppConfig {
     google: {
       sheetId: parsed.GOOGLE_SHEET_ID?.trim() || undefined,
       tabName: parsed.GOOGLE_SHEET_TAB_NAME?.trim() || undefined,
+      rawTabName: parsed.GOOGLE_SHEET_TAB_NAME_RAW?.trim() || undefined,
       serviceAccountKeyFile: parsed.GOOGLE_SERVICE_ACCOUNT_KEY_FILE?.trim() || undefined
     }
   };

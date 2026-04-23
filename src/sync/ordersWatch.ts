@@ -89,6 +89,7 @@ export async function runOrdersWatch() {
 
     const googleSheetId = cfg.google.sheetId;
     const googleTabName = cfg.google.tabName ?? 'PurchaseOrders';
+    const googleRawTabName = cfg.google.rawTabName;
     const googleKeyFile = cfg.google.serviceAccountKeyFile;
 
     // In-memory cache to avoid reading Google Sheet multiple times per poll.
@@ -579,6 +580,22 @@ export async function runOrdersWatch() {
           // Upload to Google Sheets (append all exported rows; no per-row dedup).
           if (!googleSheetId || !googleKeyFile) {
             throw new Error('Google Sheets upload is not configured. Set GOOGLE_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_KEY_FILE.');
+          }
+          // Upload raw data (before rules) if configured.
+          if (googleRawTabName) {
+            log('google:upload:raw:start', {
+              sheetId: googleSheetId,
+              tabName: googleRawTabName,
+              rows: table.rows.length
+            });
+            const rawRes = await appendTableToSheet({
+              sheetId: googleSheetId,
+              tabName: googleRawTabName,
+              serviceAccountKeyFile: googleKeyFile,
+              headers: table.headers,
+              rows: table.rows
+            });
+            log('google:upload:raw:ok', { appendedRows: rawRes.appended });
           }
           {
             log('google:upload:start', {

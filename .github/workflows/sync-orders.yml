@@ -87,6 +87,7 @@ jobs:
           # Google Sheets
           GOOGLE_SHEET_ID: ${{ vars.GOOGLE_SHEET_ID }}
           GOOGLE_SHEET_TAB_NAME: ${{ vars.GOOGLE_SHEET_TAB_NAME }}
+          GOOGLE_SHEET_TAB_NAME_RAW: ${{ vars.GOOGLE_SHEET_TAB_NAME_RAW }}
           GOOGLE_SERVICE_ACCOUNT_KEY_FILE: .secrets/kiotviet-service-account.json
 
         run: npm run sync -- orders
