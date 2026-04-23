@@ -513,6 +513,8 @@ export async function runOrdersWatch() {
   // User-requested processing order:
   // 1) Filter early to drop irrelevant columns
   processedRows = filterColumnsKiotViet(processedRows);
+  // Snapshot after column filter — used for RAW tab (same columns, no split/merge rules).
+  const rawFilteredRows = processedRows.slice();
   // 2) (no-op) filtered rows already contain optional columns listed in COLUMNS_TO_KEEP; ensureColumns removed
   // 3) Apply N11 rule (note: this will use the Đơn giá present at this point — pre-merge per user's order)
   processedRows = applyN11Rule(processedRows);
@@ -589,20 +591,21 @@ export async function runOrdersWatch() {
             return parsed ?? 0;
           };
           const processedRowsAsc = [...processedRows].sort((a, b) => getTimeMs(a) - getTimeMs(b));
+          const rawFilteredRowsAsc = [...rawFilteredRows].sort((a, b) => getTimeMs(a) - getTimeMs(b));
 
-          // Upload filtered data to raw tab if configured.
+          // Upload RAW tab (same columns as main, but no split/merge/explode rules applied).
           if (googleRawTabName) {
             log('google:upload:raw:start', {
               sheetId: googleSheetId,
               tabName: googleRawTabName,
-              rows: processedRowsAsc.length
+              rows: rawFilteredRowsAsc.length
             });
             const rawRes = await appendTableToSheet({
               sheetId: googleSheetId,
               tabName: googleRawTabName,
               serviceAccountKeyFile: googleKeyFile,
               headers: COLUMNS_TO_KEEP,
-              rows: processedRowsAsc
+              rows: rawFilteredRowsAsc
             });
             log('google:upload:raw:ok', { appendedRows: rawRes.appended });
           }
