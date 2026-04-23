@@ -581,19 +581,19 @@ export async function runOrdersWatch() {
           if (!googleSheetId || !googleKeyFile) {
             throw new Error('Google Sheets upload is not configured. Set GOOGLE_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_KEY_FILE.');
           }
-          // Upload raw data (before rules) if configured.
+          // Upload filtered data to raw tab if configured.
           if (googleRawTabName) {
             log('google:upload:raw:start', {
               sheetId: googleSheetId,
               tabName: googleRawTabName,
-              rows: table.rows.length
+              rows: processedRows.length
             });
             const rawRes = await appendTableToSheet({
               sheetId: googleSheetId,
               tabName: googleRawTabName,
               serviceAccountKeyFile: googleKeyFile,
-              headers: table.headers,
-              rows: table.rows
+              headers: COLUMNS_TO_KEEP,
+              rows: processedRows
             });
             log('google:upload:raw:ok', { appendedRows: rawRes.appended });
           }

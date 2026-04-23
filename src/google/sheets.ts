@@ -82,31 +82,40 @@ export async function appendTableToSheet(opts: {
   const sheets = google.sheets({ version: 'v4', auth });
   await ensureSheetTabExists(sheets, opts.sheetId, opts.tabName);
 
-  // Read current headers.
-  const headerResp = await sheets.spreadsheets.values.get({
+  // Scan first 5 rows to find a row matching opts.headers.
+  const scanResp = await sheets.spreadsheets.values.get({
     spreadsheetId: opts.sheetId,
-    range: `${opts.tabName}!1:1`
+    range: `${opts.tabName}!A1:ZZ5`
   });
+  const scanRows = (scanResp.data.values ?? []) as Array<Array<unknown>>;
 
-  const currentHeaders = ((headerResp.data.values?.[0] ?? []) as Array<unknown>)
-    .map((x) => String(x ?? '').trim())
-    .filter((x) => x !== '');
+  let sheetHeaders: string[] = [];
+  let headerFound = false;
+  for (const scanRow of scanRows) {
+    const candidates = scanRow.map((x) => String(x ?? '').trim());
+    if (opts.headers.length > 0 && opts.headers.every((h) => candidates.includes(h))) {
+      sheetHeaders = candidates;
+      headerFound = true;
+      break;
+    }
+  }
 
-  if (currentHeaders.length === 0) {
+  if (!headerFound) {
+    const hasData = scanRows.some((r) => r.some((c) => String(c ?? '').trim() !== ''));
+    if (hasData) {
+      throw new Error(
+        `appendTableToSheet: sheet "${opts.tabName}" has existing data but expected header columns (${opts.headers.slice(0, 3).join(', ')}...) were not found in the first 5 rows. Refusing to append to avoid data corruption.`
+      );
+    }
+    // Sheet is empty — safe to write headers to A1.
     await sheets.spreadsheets.values.update({
       spreadsheetId: opts.sheetId,
       range: `${opts.tabName}!A1`,
       valueInputOption: 'RAW',
       requestBody: { values: [opts.headers] }
     });
+    sheetHeaders = opts.headers;
   }
-
-  // Re-read sheet headers after potential initialization.
-  const headerResp2 = await sheets.spreadsheets.values.get({
-    spreadsheetId: opts.sheetId,
-    range: `${opts.tabName}!1:1`
-  });
-  const sheetHeaders = ((headerResp2.data.values?.[0] ?? []) as Array<unknown>).map((x) => String(x ?? ''));
 
   const headersIndex: Record<string, number> = {};
   for (let i = 0; i < sheetHeaders.length; i++) headersIndex[sheetHeaders[i] ?? ''] = i;
@@ -163,14 +172,23 @@ export async function readExistingOrderCodesFromSheet(opts: {
 
   const sheets = google.sheets({ version: 'v4', auth });
 
-  // Read header row to locate the order-code column.
+  // Scan first 5 rows to find the header row containing orderHeader.
   let headerRow: string[] = [];
+  let headerRowNum = 1; // 1-based
   try {
-    const headerResp = await sheets.spreadsheets.values.get({
+    const scanResp = await sheets.spreadsheets.values.get({
       spreadsheetId: opts.sheetId,
-      range: `${opts.tabName}!1:1`
+      range: `${opts.tabName}!A1:ZZ5`
     });
-    headerRow = ((headerResp.data.values?.[0] ?? []) as Array<unknown>).map((x) => String(x ?? '').trim());
+    const scanRows = (scanResp.data.values ?? []) as Array<Array<unknown>>;
+    for (let i = 0; i < scanRows.length; i++) {
+      const row = scanRows[i].map((x) => String(x ?? '').trim());
+      if (row.includes(orderHeader)) {
+        headerRow = row;
+        headerRowNum = i + 1;
+        break;
+      }
+    }
   } catch {
     // If the tab doesn't exist yet, treat as empty.
     await ensureSheetTabExists(sheets, opts.sheetId, opts.tabName).catch(() => undefined);
@@ -181,9 +199,10 @@ export async function readExistingOrderCodesFromSheet(opts: {
   if (idx < 0) return new Set<string>();
 
   const col = colIndexToA1(idx);
+  const dataStartRow = headerRowNum + 1;
   const resp = await sheets.spreadsheets.values.get({
     spreadsheetId: opts.sheetId,
-    range: `${opts.tabName}!${col}2:${col}`
+    range: `${opts.tabName}!${col}${dataStartRow}:${col}`
   });
 
   const values = (resp.data.values ?? []) as Array<Array<unknown>>;
