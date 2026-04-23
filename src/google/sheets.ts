@@ -8,6 +8,17 @@ function normalizeKeyPart(v: unknown) {
   return String(v).trim();
 }
 
+function colIndexToA1(idx: number): string {
+  let n = idx + 1;
+  let out = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
 async function ensureSheetTabExists(sheets: ReturnType<typeof google.sheets>, spreadsheetId: string, tabName: string) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
   const existing = (meta.data.sheets ?? []).some((s) => s.properties?.title === tabName);
@@ -149,11 +160,27 @@ export async function appendTableToSheet(opts: {
 
   if (toAppend.length === 0) return { appended: 0 };
 
-  await sheets.spreadsheets.values.append({
+  // Use values.update with an explicit row range instead of values.append.
+  // values.append with INSERT_ROWS skips hidden columns causing data misalignment.
+  // We find the last used row via a reliable non-hidden column (first header col that is not col A),
+  // then write rows starting at the next empty row.
+  const reliableColIdx = Object.values(headerColMap).find((i) => i > 0) ?? 1;
+  const reliableColLetter = colIndexToA1(reliableColIdx);
+  const lastRowResp = await sheets.spreadsheets.values.get({
     spreadsheetId: opts.sheetId,
-    range: `${opts.tabName}!A:ZZ`,
+    range: `${opts.tabName}!${reliableColLetter}:${reliableColLetter}`,
+    majorDimension: 'COLUMNS'
+  });
+  const filledCount = lastRowResp.data.values?.[0]?.length ?? 0;
+  const startRow = filledCount + 1; // 1-indexed next empty row
+
+  const lastColLetter = colIndexToA1(totalCols - 1);
+  const endRow = startRow + toAppend.length - 1;
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: opts.sheetId,
+    range: `${opts.tabName}!A${startRow}:${lastColLetter}${endRow}`,
     valueInputOption: 'RAW',
-    insertDataOption: 'INSERT_ROWS',
     requestBody: { values: toAppend }
   });
 
@@ -167,18 +194,6 @@ export async function readExistingOrderCodesFromSheet(opts: {
   orderCodeHeader?: string;
 }) {
   const orderHeader = opts.orderCodeHeader ?? 'Mã đặt hàng';
-
-  const colIndexToA1 = (idx: number) => {
-    // 0 -> A, 25 -> Z, 26 -> AA ...
-    let n = idx + 1;
-    let out = '';
-    while (n > 0) {
-      const rem = (n - 1) % 26;
-      out = String.fromCharCode(65 + rem) + out;
-      n = Math.floor((n - 1) / 26);
-    }
-    return out;
-  };
 
   const auth = new google.auth.GoogleAuth({
     keyFile: path.resolve(process.cwd(), opts.serviceAccountKeyFile),
